@@ -1742,6 +1742,120 @@ float forceJumpHeightMax[NUM_FORCE_POWER_LEVELS] =
 	418//(384+stepheight(18)+crouchdiff(24) = 426)
 };
 
+extern vmCvar_t bg_forceJumpHeightScale;
+extern vmCvar_t bg_forceJumpRampTime;
+
+static float PM_ForceJumpHeightScale( void )
+{
+	if ( bg_forceJumpHeightScale.value > 1.0f )
+	{
+		return bg_forceJumpHeightScale.value;
+	}
+	return 1.0f;
+}
+
+static float PM_ForceJumpMaxHeight( int level )
+{
+	if ( level <= FORCE_LEVEL_0 )
+	{
+		return forceJumpHeight[level];
+	}
+	return forceJumpHeight[level]*PM_ForceJumpHeightScale();
+}
+
+static float PM_ForceJumpBaseVelocity( int level, float curHeight )
+{
+	float vel;
+
+	if ( curHeight >= forceJumpHeight[level] )
+	{
+		return JUMP_VELOCITY;
+	}
+	vel = (forceJumpHeight[level]-curHeight)/forceJumpHeight[level]*forceJumpStrength[level];
+	vel /= 10;
+	vel += JUMP_VELOCITY;
+	return vel;
+}
+
+static float PM_ForceJumpBaseHeightAtTime( float startVel, float decay, float time )
+{
+	return startVel/decay*(1.0f-exp(-decay*time));
+}
+
+static float PM_ForceJumpLiftVelocity( int level, float curHeight )
+{
+	const float baseHeight = forceJumpHeight[level];
+	const float extraHeight = PM_ForceJumpMaxHeight( level )-baseHeight;
+	const float startVel = JUMP_VELOCITY+forceJumpStrength[level]/10.0f;
+	const float decay = forceJumpStrength[level]/(10.0f*baseHeight);
+	float apexTime, rampTime, window, lo, hi, t, u;
+	int i;
+
+	if ( extraHeight <= 0.0f )
+	{
+		return PM_ForceJumpBaseVelocity( level, curHeight );
+	}
+
+	apexTime = -log( 1.0f-decay*baseHeight/startVel )/decay;
+	rampTime = bg_forceJumpRampTime.value/1000.0f;
+	if ( rampTime < 0.0f )
+	{
+		rampTime = 0.0f;
+	}
+	else if ( rampTime > apexTime*0.5f )
+	{
+		rampTime = apexTime*0.5f;
+	}
+	window = apexTime-rampTime;
+
+	if ( curHeight <= PM_ForceJumpBaseHeightAtTime( startVel, decay, rampTime ) )
+	{
+		return PM_ForceJumpBaseVelocity( level, curHeight );
+	}
+
+	lo = rampTime;
+	hi = apexTime;
+	for ( i = 0; i < 16; i++ )
+	{
+		t = (lo+hi)*0.5f;
+		u = (t-rampTime)/window;
+		if ( PM_ForceJumpBaseHeightAtTime( startVel, decay, t )+extraHeight*u*u*(3.0f-2.0f*u) < curHeight )
+		{
+			lo = t;
+		}
+		else
+		{
+			hi = t;
+		}
+	}
+	t = (lo+hi)*0.5f;
+	u = (t-rampTime)/window;
+
+	return startVel*exp(-decay*t)+extraHeight*6.0f*u*(1.0f-u)/window;
+}
+
+static void PM_ForceJumpReleaseCut( void )
+{
+	const int level = pm->ps->fd.forcePowerLevel[FP_LEVITATION];
+	float maxVel;
+
+	if ( PM_ForceJumpHeightScale() <= 1.0f
+		|| !(pm->ps->fd.forcePowersActive&(1<<FP_LEVITATION))
+		|| pm->ps->groundEntityNum != ENTITYNUM_NONE
+		|| level <= FORCE_LEVEL_0
+		|| level >= NUM_FORCE_POWER_LEVELS
+		|| BG_InSpecialJump( pm->ps->legsAnim ) )
+	{
+		return;
+	}
+
+	maxVel = PM_ForceJumpBaseVelocity( level, pm->ps->origin[2]-pm->ps->fd.forceJumpZStart );
+	if ( pm->ps->velocity[2] > maxVel )
+	{
+		pm->ps->velocity[2] = maxVel;
+	}
+}
+
 void PM_GrabWallForJump( int anim )
 {//NOTE!!! assumes an appropriate anim is being passed in!!!
 	PM_SetAnim( SETANIM_BOTH, anim, SETANIM_FLAG_RESTART|SETANIM_FLAG_OVERRIDE|SETANIM_FLAG_HOLD );
@@ -1898,7 +2012,7 @@ static qboolean PM_CheckJump( void )
 				//check for max force jump level and cap off & cut z vel
 				if ( ( curHeight<=forceJumpHeight[0] ||//still below minimum jump height
 						(pm->ps->fd.forcePower&&pm->cmd.upmove>=10) ) &&////still have force power available and still trying to jump up
-					curHeight < forceJumpHeight[pm->ps->fd.forcePowerLevel[FP_LEVITATION]] &&
+					curHeight < PM_ForceJumpMaxHeight( pm->ps->fd.forcePowerLevel[FP_LEVITATION] ) &&
 					pm->ps->fd.forceJumpZStart)//still below maximum jump height
 				{//can still go up
 					if ( curHeight > forceJumpHeight[0] )
@@ -2024,12 +2138,19 @@ static qboolean PM_CheckJump( void )
 					}
 
 					//need to scale this down, start with height velocity (based on max force jump height) and scale down to regular jump vel
-					pm->ps->velocity[2] = (forceJumpHeight[pm->ps->fd.forcePowerLevel[FP_LEVITATION]]-curHeight)/forceJumpHeight[pm->ps->fd.forcePowerLevel[FP_LEVITATION]]*forceJumpStrength[pm->ps->fd.forcePowerLevel[FP_LEVITATION]];//JUMP_VELOCITY;
-					pm->ps->velocity[2] /= 10;
-					pm->ps->velocity[2] += JUMP_VELOCITY;
+					if ( PM_ForceJumpHeightScale() > 1.0f )
+					{
+						pm->ps->velocity[2] = PM_ForceJumpLiftVelocity( pm->ps->fd.forcePowerLevel[FP_LEVITATION], curHeight );
+					}
+					else
+					{
+						pm->ps->velocity[2] = (forceJumpHeight[pm->ps->fd.forcePowerLevel[FP_LEVITATION]]-curHeight)/forceJumpHeight[pm->ps->fd.forcePowerLevel[FP_LEVITATION]]*forceJumpStrength[pm->ps->fd.forcePowerLevel[FP_LEVITATION]];//JUMP_VELOCITY;
+						pm->ps->velocity[2] /= 10;
+						pm->ps->velocity[2] += JUMP_VELOCITY;
+					}
 					pm->ps->pm_flags |= PMF_JUMP_HELD;
 				}
-				else if ( curHeight > forceJumpHeight[0] && curHeight < forceJumpHeight[pm->ps->fd.forcePowerLevel[FP_LEVITATION]] - forceJumpHeight[0] )
+				else if ( curHeight > forceJumpHeight[0] && curHeight < PM_ForceJumpMaxHeight( pm->ps->fd.forcePowerLevel[FP_LEVITATION] ) - forceJumpHeight[0] )
 				{//still have some headroom, don't totally stop it
 					if ( pm->ps->velocity[2] > JUMP_VELOCITY )
 					{
@@ -10642,6 +10763,10 @@ void PmoveSingle (pmove_t *pmove) {
 
 	if ( pm->cmd.upmove < 10 && !(pm->ps->pm_flags & PMF_STUCK_TO_WALL)) {
 		// not holding jump
+		if ( pm->ps->pm_flags & PMF_JUMP_HELD )
+		{
+			PM_ForceJumpReleaseCut();
+		}
 		pm->ps->pm_flags &= ~PMF_JUMP_HELD;
 	}
 
