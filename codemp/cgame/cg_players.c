@@ -7914,6 +7914,164 @@ static void CG_ForceElectrocution( centity_t *cent, const vec3_t origin, vec3_t 
 	}
 }
 
+#define FORCE_LIGHTNING_FX_INTERVAL	50
+#define FORCE_LIGHTNING_MAX_ARCS	16
+#define FORCE_LIGHTNING_ARC_RADIUS	600
+static int forceLightningFxTime[MAX_GENTITIES];
+
+static qboolean CG_ForceLightningFxDue( int entNum )
+{
+	int *next = &forceLightningFxTime[entNum];
+	if ( *next > cg.time + FORCE_LIGHTNING_FX_INTERVAL )
+	{
+		*next = 0;
+	}
+	if ( cg.time < *next )
+	{
+		return qfalse;
+	}
+	*next = ( cg.time - *next < FORCE_LIGHTNING_FX_INTERVAL ) ? *next + FORCE_LIGHTNING_FX_INTERVAL : cg.time + FORCE_LIGHTNING_FX_INTERVAL;
+	return qtrue;
+}
+
+static qboolean CG_ForceLightningTargetValid( centity_t *attacker, int entNum )
+{
+	centity_t *target = &cg_entities[entNum];
+
+	if ( entNum == attacker->currentState.number )
+	{
+		return qfalse;
+	}
+	if ( target->currentState.eType != ET_PLAYER && target->currentState.eType != ET_NPC )
+	{
+		return qfalse;
+	}
+	if ( target->currentState.eFlags & EF_DEAD )
+	{
+		return qfalse;
+	}
+	if ( cgs.gametype >= GT_TEAM
+		&& attacker->currentState.number < MAX_CLIENTS && entNum < MAX_CLIENTS
+		&& cgs.clientinfo[attacker->currentState.number].team == cgs.clientinfo[entNum].team )
+	{
+		return qfalse;
+	}
+	return qtrue;
+}
+
+static int CG_ForceLightningTargets( centity_t *attacker, int *targets )
+{
+	vec3_t	forward, dir;
+	trace_t	tr;
+	int		numTargets = 0;
+	int		i;
+
+	if ( attacker->currentState.number == cg.snap->ps.clientNum )
+	{
+		AngleVectors( cg.predictedPlayerState.viewangles, forward, NULL, NULL );
+	}
+	else
+	{
+		AngleVectors( attacker->lerpAngles, forward, NULL, NULL );
+	}
+
+	for ( i = -1; i < cg.snap->numEntities && numTargets < FORCE_LIGHTNING_MAX_ARCS; i++ )
+	{
+		int			entNum = ( i < 0 ) ? cg.snap->ps.clientNum : cg.snap->entities[i].number;
+		centity_t	*target = &cg_entities[entNum];
+		float		dist;
+
+		if ( !CG_ForceLightningTargetValid( attacker, entNum ) )
+		{
+			continue;
+		}
+		VectorSubtract( target->lerpOrigin, attacker->lerpOrigin, dir );
+		dist = VectorNormalize( dir );
+		if ( DotProduct( dir, forward ) < 0.5f || dist - 16.0f >= FORCE_LIGHTNING_ARC_RADIUS )
+		{
+			continue;
+		}
+		CG_Trace( &tr, attacker->lerpOrigin, NULL, NULL, target->lerpOrigin, attacker->currentState.number, MASK_SHOT );
+		if ( tr.fraction < 1.0f && tr.entityNum != entNum )
+		{
+			continue;
+		}
+		targets[numTargets++] = entNum;
+	}
+	return numTargets;
+}
+
+static void CG_ForceLightningArcEnd( centity_t *target, vec3_t end )
+{
+	int		solid = target->currentState.solid;
+	float	xy = 12.0f, down = -20.0f, up = 32.0f;
+
+	if ( solid && solid != SOLID_BMODEL )
+	{
+		xy = ( solid & 255 ) * 0.6f;
+		down = -( ( solid >> 8 ) & 255 ) * 0.6f;
+		up = ( ( ( solid >> 16 ) & 255 ) - 32 ) * 0.7f;
+	}
+	end[0] = target->lerpOrigin[0] + Q_flrand( -xy, xy );
+	end[1] = target->lerpOrigin[1] + Q_flrand( -xy, xy );
+	end[2] = target->lerpOrigin[2] + Q_flrand( down, up );
+}
+
+static void CG_ForceLightningArcs( centity_t *attacker, const vec3_t start )
+{
+	int		targets[FORCE_LIGHTNING_MAX_ARCS];
+	int		numTargets = CG_ForceLightningTargets( attacker, targets );
+	int		i;
+
+	for ( i = 0; i < numTargets; i++ )
+	{
+		centity_t					*target = &cg_entities[targets[i]];
+		addElectricityArgStruct_t	p;
+		addspriteArgStruct_t		s;
+
+		VectorCopy( start, p.start );
+		CG_ForceLightningArcEnd( target, p.end );
+		p.size1 = Q_flrand( 3.0f, 5.0f );
+		p.size2 = 1.5f;
+		p.sizeParm = 0.0f;
+		p.alpha1 = 1.0f;
+		p.alpha2 = 0.4f;
+		p.alphaParm = 0.0f;
+		VectorSet( p.sRGB, 0.45f, 0.55f, 1.0f );
+		VectorCopy( p.sRGB, p.eRGB );
+		p.rgbParm = 0.0f;
+		p.chaos = Q_flrand( 0.6f, 1.0f );
+		p.killTime = Q_irand( 50, 60 );
+		p.shader = cgs.media.boltShader;
+		p.flags = (0x00000001 | 0x00000100 | 0x02000000 | 0x01000000);//FX_ALPHA_LINEAR | FX_SIZE_LINEAR | FX_BRANCH | FX_TAPER
+		trap->FX_AddElectricity( &p );
+
+		CG_ForceLightningArcEnd( target, p.end );
+		p.size1 = Q_flrand( 1.5f, 2.5f );
+		p.size2 = 1.0f;
+		p.alpha2 = 0.5f;
+		VectorSet( p.sRGB, 0.9f, 0.93f, 1.0f );
+		VectorCopy( p.sRGB, p.eRGB );
+		p.chaos = Q_flrand( 0.3f, 0.5f );
+		p.killTime = Q_irand( 50, 60 );
+		p.flags = (0x00000001 | 0x01000000);//FX_ALPHA_LINEAR | FX_TAPER
+		trap->FX_AddElectricity( &p );
+
+		VectorCopy( p.end, s.origin );
+		VectorClear( s.vel );
+		VectorClear( s.accel );
+		s.scale = s.dscale = Q_flrand( 8.0f, 16.0f );
+		s.sAlpha = 1.0f;
+		s.eAlpha = 0.0f;
+		s.rotation = Q_flrand( 0.0f, 360.0f );
+		s.bounce = 0.0f;
+		s.life = 60;
+		s.shader = cgs.media.lightningFlash;
+		s.flags = 0;
+		trap->FX_AddSprite( &s );
+	}
+}
+
 void *cg_g2JetpackInstance = NULL;
 
 #define JETPACK_MODEL "models/weapons2/jetpack/model.glm"
@@ -9468,7 +9626,8 @@ void CG_Player( centity_t *cent ) {
 		*/
 	}
 	else if ( cent->currentState.activeForcePass
-		&& cent->currentState.NPC_class != CLASS_VEHICLE)
+		&& cent->currentState.NPC_class != CLASS_VEHICLE
+		&& ( cent->currentState.activeForcePass <= FORCE_LEVEL_2 || CG_ForceLightningFxDue( cent->currentState.number ) ) )
 	{//doing the electrocuting
 		matrix3_t axis;
 		vec3_t tAng, fAng, fxDir;
@@ -9498,6 +9657,20 @@ void CG_Player( centity_t *cent ) {
 			//trap->FX_PlayEffectID( cgs.effects.forceLightningWide, efOrg, fxDir );
 			//trap->FX_PlayEntityEffectID(cgs.effects.forceLightningWide, efOrg, axis, cent->boltInfo, cent->currentState.number, -1, -1);
 			trap->FX_PlayEntityEffectID(cgs.effects.forceLightningWide, efOrg, axis, -1, -1, -1, -1);
+			CG_ForceLightningArcs( cent, efOrg );
+
+			if ( ( cent->currentState.torsoAnim == BOTH_FORCE_2HANDEDLIGHTNING_START
+					|| cent->currentState.torsoAnim == BOTH_FORCE_2HANDEDLIGHTNING_HOLD )
+				&& ci->bolt_rhand != -1 )
+			{
+				mdxaBone_t	rHandMatrix;
+				trap->G2API_GetBoltMatrix(cent->ghoul2, 0, ci->bolt_rhand, &rHandMatrix, cent->turAngles, cent->lerpOrigin, cg.time, cgs.gameModels, cent->modelScale);
+				efOrg[0] = rHandMatrix.matrix[0][3];
+				efOrg[1] = rHandMatrix.matrix[1][3];
+				efOrg[2] = rHandMatrix.matrix[2][3];
+				trap->FX_PlayEntityEffectID(cgs.effects.forceLightningWide, efOrg, axis, -1, -1, -1, -1);
+				CG_ForceLightningArcs( cent, efOrg );
+			}
 		}
 		else
 		{//line

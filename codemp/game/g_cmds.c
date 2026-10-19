@@ -2693,7 +2693,8 @@ void Cmd_ToggleSaber_f(gentity_t *ent)
 		return;
 	}
 
-	if (ent->client->ps.forceHandExtend != HANDEXTEND_NONE)
+	if (ent->client->ps.forceHandExtend != HANDEXTEND_NONE
+		&& ent->client->ps.forceHandExtend != HANDEXTEND_FORCE_HOLD)
 	{
 		return;
 	}

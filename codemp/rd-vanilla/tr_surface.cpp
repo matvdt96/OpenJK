@@ -565,60 +565,6 @@ static void DoLine( const vec3_t start, const vec3_t end, const vec3_t up, float
 	tess.indexes[tess.numIndexes++] = vbase + 3;
 }
 
-static void DoLine2( const vec3_t start, const vec3_t end, const vec3_t up, float spanWidth, float spanWidth2 )
-{
-	int			vbase;
-
-	RB_CHECKOVERFLOW( 4, 6 );
-
-	vbase = tess.numVertexes;
-
-	VectorMA( start, spanWidth, up, tess.xyz[tess.numVertexes] );
-	tess.texCoords[tess.numVertexes][0][0] = 0;
-	tess.texCoords[tess.numVertexes][0][1] = 0;
-	tess.vertexColors[tess.numVertexes][0] = backEnd.currentEntity->e.shaderRGBA[0];// * 0.25;//wtf??not sure why the code would be doing this
-	tess.vertexColors[tess.numVertexes][1] = backEnd.currentEntity->e.shaderRGBA[1];// * 0.25;
-	tess.vertexColors[tess.numVertexes][2] = backEnd.currentEntity->e.shaderRGBA[2];// * 0.25;
-	tess.vertexColors[tess.numVertexes][3] = backEnd.currentEntity->e.shaderRGBA[3];// * 0.25;
-	tess.numVertexes++;
-
-	VectorMA( start, -spanWidth, up, tess.xyz[tess.numVertexes] );
-	tess.texCoords[tess.numVertexes][0][0] = 1;//backEnd.currentEntity->e.shaderTexCoord[0];
-	tess.texCoords[tess.numVertexes][0][1] = 0;
-	tess.vertexColors[tess.numVertexes][0] = backEnd.currentEntity->e.shaderRGBA[0];
-	tess.vertexColors[tess.numVertexes][1] = backEnd.currentEntity->e.shaderRGBA[1];
-	tess.vertexColors[tess.numVertexes][2] = backEnd.currentEntity->e.shaderRGBA[2];
-	tess.vertexColors[tess.numVertexes][3] = backEnd.currentEntity->e.shaderRGBA[3];
-	tess.numVertexes++;
-
-	VectorMA( end, spanWidth2, up, tess.xyz[tess.numVertexes] );
-
-	tess.texCoords[tess.numVertexes][0][0] = 0;
-	tess.texCoords[tess.numVertexes][0][1] = 1;//backEnd.currentEntity->e.shaderTexCoord[1];
-	tess.vertexColors[tess.numVertexes][0] = backEnd.currentEntity->e.shaderRGBA[0];
-	tess.vertexColors[tess.numVertexes][1] = backEnd.currentEntity->e.shaderRGBA[1];
-	tess.vertexColors[tess.numVertexes][2] = backEnd.currentEntity->e.shaderRGBA[2];
-	tess.vertexColors[tess.numVertexes][3] = backEnd.currentEntity->e.shaderRGBA[3];
-	tess.numVertexes++;
-
-	VectorMA( end, -spanWidth2, up, tess.xyz[tess.numVertexes] );
-	tess.texCoords[tess.numVertexes][0][0] = 1;//backEnd.currentEntity->e.shaderTexCoord[0];
-	tess.texCoords[tess.numVertexes][0][1] = 1;//backEnd.currentEntity->e.shaderTexCoord[1];
-	tess.vertexColors[tess.numVertexes][0] = backEnd.currentEntity->e.shaderRGBA[0];
-	tess.vertexColors[tess.numVertexes][1] = backEnd.currentEntity->e.shaderRGBA[1];
-	tess.vertexColors[tess.numVertexes][2] = backEnd.currentEntity->e.shaderRGBA[2];
-	tess.vertexColors[tess.numVertexes][3] = backEnd.currentEntity->e.shaderRGBA[3];
-	tess.numVertexes++;
-
-	tess.indexes[tess.numIndexes++] = vbase;
-	tess.indexes[tess.numIndexes++] = vbase + 1;
-	tess.indexes[tess.numIndexes++] = vbase + 2;
-
-	tess.indexes[tess.numIndexes++] = vbase + 2;
-	tess.indexes[tess.numIndexes++] = vbase + 1;
-	tess.indexes[tess.numIndexes++] = vbase + 3;
-}
-
 static void DoLine_Oriented( const vec3_t start, const vec3_t end, const vec3_t up, float spanWidth )
 {
 	float		spanWidth2;
@@ -862,87 +808,70 @@ static void RB_SurfaceCylinder( void )
 	}
 }
 
-static vec3_t sh1, sh2;
 static float f_count;
 
-#define LIGHTNING_RECURSION_LEVEL 1 // was 2
+#define BOLT_STEP			20
+#define BOLT_MAX_LENGTH		2000
+#define BOLT_MAX_POINTS		( BOLT_MAX_LENGTH / BOLT_STEP * 2 + 3 )
 
-// these functions are pretty crappy in terms of returning a nice range of rnd numbers, but it's probably good enough?
-/*static int Q_rand( int *seed ) {
-	*seed = (69069 * *seed + 1);
-	return *seed;
-}
-
-static float Q_random( int *seed ) {
-	return ( Q_rand( seed ) & 0xffff ) / (float)0x10000;
-}
-
-static float Q_crandom( int *seed ) {
-	return 2.0F * ( Q_random( seed ) - 0.5f );
-}
-*/
-// Up front, we create a random "shape", then apply that to each line segment...and then again to each of those segments...kind of like a fractal
 //----------------------------------------------------------------------------
-static void CreateShape()
+static void BoltVertex( const vec3_t xyz, float s, float t )
 //----------------------------------------------------------------------------
 {
-	VectorSet( sh1, 0.66f + Q_flrand(-1.0f, 1.0f) * 0.1f,	// fwd
-				0.07f + Q_flrand(-1.0f, 1.0f) * 0.025f,
-				0.07f + Q_flrand(-1.0f, 1.0f) * 0.025f );
-
-	// it seems to look best to have a point on one side of the ideal line, then the other point on the other side.
-	VectorSet( sh2, 0.33f + Q_flrand(-1.0f, 1.0f) * 0.1f,	// fwd
-					-sh1[1] + Q_flrand(-1.0f, 1.0f) * 0.02f,	// forcing point to be on the opposite side of the line -- right
-					-sh1[2] + Q_flrand(-1.0f, 1.0f) * 0.02f );// up
+	VectorCopy( xyz, tess.xyz[tess.numVertexes] );
+	tess.texCoords[tess.numVertexes][0][0] = s;
+	tess.texCoords[tess.numVertexes][0][1] = t;
+	tess.vertexColors[tess.numVertexes][0] = backEnd.currentEntity->e.shaderRGBA[0];
+	tess.vertexColors[tess.numVertexes][1] = backEnd.currentEntity->e.shaderRGBA[1];
+	tess.vertexColors[tess.numVertexes][2] = backEnd.currentEntity->e.shaderRGBA[2];
+	tess.vertexColors[tess.numVertexes][3] = backEnd.currentEntity->e.shaderRGBA[3];
+	tess.numVertexes++;
 }
 
 //----------------------------------------------------------------------------
-static void ApplyShape( vec3_t start, vec3_t end, vec3_t right, float sradius, float eradius, int count )
+static void DrawBoltRibbon( const vec3_t *points, const float *radii, int numPoints, const vec3_t fallbackRight )
 //----------------------------------------------------------------------------
 {
-	vec3_t	point1, point2, fwd;
-	vec3_t	rt, up;
-	float	perc, dis;
-
-    if ( count < 1 )
+	if ( numPoints < 2 )
 	{
-		// done recursing
-		DoLine2( start, end, right, sradius, eradius );
 		return;
 	}
 
-    CreateShape();
+	RB_CHECKOVERFLOW( numPoints * 2, ( numPoints - 1 ) * 6 );
 
-	VectorSubtract( end, start, fwd );
-	dis = VectorNormalize( fwd ) * 0.7f;
-	MakeNormalVectors( fwd, rt, up );
+	int vbase = tess.numVertexes;
 
-	perc = sh1[0];
+	for ( int i = 0; i < numPoints; i++ )
+	{
+		vec3_t	tangent, toView, right, v;
 
-	VectorScale( start, perc, point1 );
-	VectorMA( point1, 1.0f - perc, end, point1 );
-	VectorMA( point1, dis * sh1[1], rt, point1 );
-	VectorMA( point1, dis * sh1[2], up, point1 );
+		VectorSubtract( points[i < numPoints - 1 ? i + 1 : i], points[i > 0 ? i - 1 : i], tangent );
+		VectorSubtract( points[i], backEnd.viewParms.ori.origin, toView );
+		CrossProduct( tangent, toView, right );
+		if ( VectorNormalize( right ) < 0.01f )
+		{
+			VectorCopy( fallbackRight, right );
+		}
 
-	// do a quick and dirty interpolation of the radius at that point
-	float rads1, rads2;
+		float t = (float)i / ( numPoints - 1 );
+		VectorMA( points[i], radii[i], right, v );
+		BoltVertex( v, 0, t );
+		VectorMA( points[i], -radii[i], right, v );
+		BoltVertex( v, 1, t );
+	}
 
-	rads1 = sradius * 0.666f + eradius * 0.333f;
-	rads2 = sradius * 0.333f + eradius * 0.666f;
+	for ( int i = 0; i < numPoints - 1; i++ )
+	{
+		int v0 = vbase + i * 2;
 
-	// recursion
-    ApplyShape( start, point1, right, sradius, rads1, count - 1 );
+		tess.indexes[tess.numIndexes++] = v0;
+		tess.indexes[tess.numIndexes++] = v0 + 1;
+		tess.indexes[tess.numIndexes++] = v0 + 2;
 
-	perc = sh2[0];
-
-	VectorScale( start, perc, point2 );
-	VectorMA( point2, 1.0f - perc, end, point2 );
-	VectorMA( point2, dis * sh2[1], rt, point2 );
-	VectorMA( point2, dis * sh2[2], up, point2 );
-
-	// recursion
-    ApplyShape( point2, point1, right, rads1, rads2, count - 1 );
-	ApplyShape( point2, end, right, rads2, eradius, count - 1 );
+		tess.indexes[tess.numIndexes++] = v0 + 2;
+		tess.indexes[tess.numIndexes++] = v0 + 1;
+		tess.indexes[tess.numIndexes++] = v0 + 3;
+	}
 }
 
 //----------------------------------------------------------------------------
@@ -955,23 +884,36 @@ static void DoBoltSeg( vec3_t start, vec3_t end, vec3_t right, float radius )
 	vec3_t rt, up;
 	vec3_t temp;
 	int		i;
-    float dis, oldPerc = 0.0f, perc, oldRadius, newRadius;
+    float dis, perc, newRadius;
+	vec3_t	points[BOLT_MAX_POINTS];
+	float	radii[BOLT_MAX_POINTS];
+	int		numPoints = 0;
+	vec3_t	forkStart[3], forkEnd[3];
+	float	forkRadius[3];
+	int		numForks = 0;
 
 	e = &backEnd.currentEntity->e;
 
 	VectorSubtract( end, start, fwd );
 	dis = VectorNormalize( fwd );
 
+	if (dis > BOLT_MAX_LENGTH)
+	{
+		dis = BOLT_MAX_LENGTH;
+	}
 	MakeNormalVectors( fwd, rt, up );
 
 	VectorCopy( start, old );
 
-	oldRadius = newRadius = radius;
+	newRadius = radius;
 
-    for ( i = 20; i <= dis; i+= 20 )
+	VectorCopy( start, points[numPoints] );
+	radii[numPoints++] = radius;
+
+    for ( i = BOLT_STEP; i <= dis; i+= BOLT_STEP )
 	{
 		// because of our large step size, we may not actually draw to the end.  In this case, fudge our percent so that we are basically complete
-		if ( i + 20 > dis )
+		if ( i + BOLT_STEP > dis )
 		{
 			perc = 1.0f;
 		}
@@ -997,17 +939,24 @@ static void DoBoltSeg( vec3_t start, vec3_t end, vec3_t right, float radius )
 
 		if ( e->renderfx & RF_TAPERED )
 		{
-			// This does pretty close to perfect tapering since apply shape interpolates the old and new as it goes along.
-			//	by using one minus the square, the radius stays fairly constant, then drops off quickly at the very point of the bolt
-			oldRadius = radius * (1.0f-oldPerc*oldPerc);
+			// by using one minus the square, the radius stays fairly constant, then drops off quickly at the very point of the bolt
 			newRadius = radius * (1.0f-perc*perc);
 		}
 
-		// Apply the random shape to our line seg to give it some micro-detail-jaggy-coolness.
-        ApplyShape( cur, old, right, newRadius, oldRadius, LIGHTNING_RECURSION_LEVEL );
+		vec3_t mid;
+		VectorAdd( old, cur, mid );
+		VectorScale( mid, 0.5f, mid );
+		VectorMA( mid, Q_crandom(&e->frame) * 1.5f, rt, mid );
+		VectorMA( mid, Q_crandom(&e->frame) * 1.5f, up, mid );
+		VectorCopy( mid, points[numPoints] );
+		radii[numPoints] = ( radii[numPoints - 1] + newRadius ) * 0.5f;
+		numPoints++;
+
+		VectorCopy( cur, points[numPoints] );
+		radii[numPoints++] = newRadius;
 
 		// randomly split off to create little tendrils, but don't do it too close to the end and especially if we are not even of the forked variety
-        if ( ( e->renderfx & RF_FORKED ) && f_count > 0 && Q_random(&e->frame) > 0.94f && radius * (1.0f - perc) > 0.2f )
+        if ( ( e->renderfx & RF_FORKED ) && f_count > 0 && Q_random(&e->frame) > 0.94f && perc < 0.8f )
 		{
 			vec3_t newDest;
 
@@ -1023,13 +972,30 @@ static void DoBoltSeg( vec3_t start, vec3_t end, vec3_t right, float radius )
 				newDest[t] += Q_crandom(&e->frame) * 80;
 			}
 
-			// we could branch off using OLD and NEWDEST, but that would allow multiple forks...whereas, we just want simpler brancing
-            DoBoltSeg( cur, newDest, right, newRadius );
+			if ( numForks < 3 )
+			{
+				VectorCopy( cur, forkStart[numForks] );
+				VectorCopy( newDest, forkEnd[numForks] );
+				forkRadius[numForks++] = newRadius * 0.6f;
+			}
 		}
 
 		// Current point along the line becomes our new old attach point
 		VectorCopy( cur, old );
-		oldPerc = perc;
+	}
+
+	if ( numPoints == 1 )
+	{
+		VectorCopy( end, points[numPoints] );
+		radii[numPoints++] = ( e->renderfx & RF_TAPERED ) ? 0.0f : radius;
+	}
+
+	DrawBoltRibbon( points, radii, numPoints, right );
+
+	// we could branch off using OLD and NEWDEST, but that would allow multiple forks...whereas, we just want simpler brancing
+	for ( i = 0; i < numForks; i++ )
+	{
+		DoBoltSeg( forkStart[i], forkEnd[i], right, forkRadius[i] );
 	}
 }
 

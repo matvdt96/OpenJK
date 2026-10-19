@@ -5989,6 +5989,11 @@ static void PM_WaterEvents( void ) {		// FIXME?
 	}
 }
 
+qboolean BG_ForceLightning2Handed( const playerState_t *ps )
+{
+	return (qboolean)( ps->weapon == WP_MELEE || (ps->weapon == WP_SABER && ps->saberHolstered == 2) );
+}
+
 void BG_ClearRocketLock( playerState_t *ps )
 {
 	if ( ps )
@@ -7020,7 +7025,7 @@ static void PM_Weapon( void )
 			}
 			else if ( (pm->ps->fd.forcePowersActive&(1<<FP_LIGHTNING)) )
 			{//lightning
-				if ( pm->ps->weapon == WP_MELEE
+				if ( BG_ForceLightning2Handed( pm->ps )
 					&& pm->ps->activeForcePass > FORCE_LEVEL_2 )
 				{//2-handed lightning
 					desiredAnim = BOTH_FORCE_2HANDEDLIGHTNING_HOLD;

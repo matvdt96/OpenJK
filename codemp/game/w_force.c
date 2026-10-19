@@ -1719,7 +1719,7 @@ void ForceLightningDamage( gentity_t *self, gentity_t *traceEnt, vec3_t dir, vec
 					}
 				}
 
-				if ( self->client->ps.weapon == WP_MELEE
+				if ( BG_ForceLightning2Handed( &self->client->ps )
 					&& self->client->ps.fd.forcePowerLevel[FP_LIGHTNING] > FORCE_LEVEL_2 )
 				{//2-handed lightning
 					//jackin' 'em up, Palpatine-style
@@ -4315,6 +4315,11 @@ static void WP_ForcePowerRun( gentity_t *self, forcePowers_t forcePower, usercmd
 			{
 				ForceShootLightning( self );
 				BG_ForcePowerDrain( &self->client->ps, forcePower, 0 );
+				if ( BG_ForceLightning2Handed( &self->client->ps )
+					&& self->client->ps.fd.forcePowerLevel[FP_LIGHTNING] > FORCE_LEVEL_2 )
+				{
+					BG_ForcePowerDrain( &self->client->ps, forcePower, 0 );
+				}
 				self->client->force.lightningDebounce += FORCE_DEBOUNCE_TIME;
 			}
 		}

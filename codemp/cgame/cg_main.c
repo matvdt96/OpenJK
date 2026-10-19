@@ -1149,6 +1149,7 @@ static void CG_RegisterGraphics( void ) {
 	CG_RegisterEffects();
 
 	cgs.media.boltShader = trap->R_RegisterShader( "gfx/misc/blueLine" );
+	cgs.media.lightningFlash = trap->R_RegisterShader( "gfx/misc/lightningFlash" );
 
 	cgs.effects.turretShotEffect = trap->FX_RegisterEffect( "turret/shot" );
 	cgs.effects.mEmplacedDeadSmoke = trap->FX_RegisterEffect("emplaced/dead_smoke.efx");
