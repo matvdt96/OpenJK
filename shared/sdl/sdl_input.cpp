@@ -1149,6 +1149,17 @@ static void IN_JoyMove( void )
 	stick_state.oldaxes = axes;
 }
 
+/*
+===============
+IN_PumpEvents
+===============
+*/
+void IN_PumpEvents( void ) {
+	if ( !SDL_WasInit( SDL_INIT_VIDEO ) )
+		return;
+
+	SDL_PumpEvents();
+}
 
 void IN_Frame (void) {
 	qboolean loading;

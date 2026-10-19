@@ -26,6 +26,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 #include "client.h"
 #include "cl_uiapi.h"
+#include "sys/sys_local.h"
 
 extern console_t con;
 qboolean	scr_initialized;		// ready to draw
@@ -498,6 +499,8 @@ void SCR_UpdateScreen( void ) {
 	if ( !scr_initialized ) {
 		return;				// not initialized yet
 	}
+
+	IN_PumpEvents();
 
 	if ( ++recursive > 2 ) {
 		Com_Error( ERR_FATAL, "SCR_UpdateScreen: recursively called" );

@@ -25,6 +25,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 void 		IN_Init( void *windowData );
 void 		IN_Frame( void );
+void 		IN_PumpEvents( void );
 void 		IN_Shutdown( void );
 void 		IN_Restart( void );
 
