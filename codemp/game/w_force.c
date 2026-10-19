@@ -1078,7 +1078,7 @@ void WP_ForcePowerStart( gentity_t *self, forcePowers_t forcePower, int override
 	{
 		BG_ForcePowerDrain( &self->client->ps, forcePower, overrideAmt*0.025 );
 	}
-	else if ((int)forcePower != FP_GRIP && (int)forcePower != FP_DRAIN)
+	else if ((int)forcePower != FP_GRIP && (int)forcePower != FP_DRAIN && (int)forcePower != FP_LIGHTNING)
 	{ //grip and drain drain as damage is done
 		BG_ForcePowerDrain( &self->client->ps, forcePower, overrideAmt );
 	}
@@ -1663,7 +1663,7 @@ void ForceLightning( gentity_t *self )
 	WP_ForcePowerStart( self, FP_LIGHTNING, 500 );
 }
 
-void ForceLightningDamage( gentity_t *self, gentity_t *traceEnt, vec3_t dir, vec3_t impactPoint )
+qboolean ForceLightningDamage( gentity_t *self, gentity_t *traceEnt, vec3_t dir, vec3_t impactPoint )
 {
 	self->client->dangerTime = level.time;
 	self->client->ps.eFlags &= ~EF_INVULNERABLE;
@@ -1687,7 +1687,7 @@ void ForceLightningDamage( gentity_t *self, gentity_t *traceEnt, vec3_t dir, vec
 				{
 					traceEnt->client->ps.fd.forcePower = traceEnt->client->ps.fd.forcePowerMax;
 				}
-				return;
+				return qtrue;
 			}
 			if (ForcePowerUsableOn(self, traceEnt, FP_LIGHTNING))
 			{
@@ -1748,20 +1748,23 @@ void ForceLightningDamage( gentity_t *self, gentity_t *traceEnt, vec3_t dir, vec
 						traceEnt->client->cloakToggleTime = level.time + Q_irand( 3000, 10000 );
 					}
 				}
+				return qtrue;
 			}
 		}
 	}
+	return qfalse;
 }
 
-void ForceShootLightning( gentity_t *self )
+qboolean ForceShootLightning( gentity_t *self )
 {
 	trace_t	tr;
 	vec3_t	end, forward;
 	gentity_t	*traceEnt;
+	qboolean	hit = qfalse;
 
 	if ( self->health <= 0 )
 	{
-		return;
+		return qfalse;
 	}
 	AngleVectors( self->client->ps.viewangles, forward, NULL, NULL );
 	VectorNormalize( forward );
@@ -1855,7 +1858,10 @@ void ForceShootLightning( gentity_t *self )
 			}
 
 			// ok, we are within the radius, add us to the incoming list
-			ForceLightningDamage( self, traceEnt, dir, ent_org );
+			if ( ForceLightningDamage( self, traceEnt, dir, ent_org ) )
+			{
+				hit = qtrue;
+			}
 		}
 	}
 	else
@@ -1865,12 +1871,13 @@ void ForceShootLightning( gentity_t *self )
 		trap->Trace( &tr, self->client->ps.origin, vec3_origin, vec3_origin, end, self->s.number, MASK_SHOT, qfalse, 0, 0 );
 		if ( tr.entityNum == ENTITYNUM_NONE || tr.fraction == 1.0 || tr.allsolid || tr.startsolid )
 		{
-			return;
+			return qfalse;
 		}
 
 		traceEnt = &g_entities[tr.entityNum];
-		ForceLightningDamage( self, traceEnt, forward, tr.endpos );
+		hit = ForceLightningDamage( self, traceEnt, forward, tr.endpos );
 	}
+	return hit;
 }
 
 void ForceDrain( gentity_t *self )
@@ -3748,12 +3755,16 @@ void WP_ForcePowerStop( gentity_t *self, forcePowers_t forcePower )
 		break;
 	case FP_LIGHTNING:
 		if ( self->client->ps.fd.forcePowerLevel[FP_LIGHTNING] < FORCE_LEVEL_2 )
-		{//don't do it again for 3 seconds, minimum... FIXME: this should be automatic once regeneration is slower (normal)
-			self->client->ps.fd.forcePowerDebounce[FP_LIGHTNING] = level.time + 3000;
+		{
+			self->client->ps.fd.forcePowerDebounce[FP_LIGHTNING] = level.time + 1500;
+		}
+		else if ( self->client->ps.fd.forcePowerLevel[FP_LIGHTNING] == FORCE_LEVEL_2 )
+		{
+			self->client->ps.fd.forcePowerDebounce[FP_LIGHTNING] = level.time + 1000;
 		}
 		else
 		{
-			self->client->ps.fd.forcePowerDebounce[FP_LIGHTNING] = level.time + 1500;
+			self->client->ps.fd.forcePowerDebounce[FP_LIGHTNING] = level.time + 500;
 		}
 		if (self->client->ps.forceHandExtend == HANDEXTEND_FORCE_HOLD)
 		{
@@ -4313,12 +4324,14 @@ static void WP_ForcePowerRun( gentity_t *self, forcePowers_t forcePower, usercmd
 		{
 			while ( self->client->force.lightningDebounce < level.time )
 			{
-				ForceShootLightning( self );
-				BG_ForcePowerDrain( &self->client->ps, forcePower, 0 );
-				if ( BG_ForceLightning2Handed( &self->client->ps )
-					&& self->client->ps.fd.forcePowerLevel[FP_LIGHTNING] > FORCE_LEVEL_2 )
+				if ( ForceShootLightning( self ) )
 				{
 					BG_ForcePowerDrain( &self->client->ps, forcePower, 0 );
+					if ( BG_ForceLightning2Handed( &self->client->ps )
+						&& self->client->ps.fd.forcePowerLevel[FP_LIGHTNING] > FORCE_LEVEL_2 )
+					{
+						BG_ForcePowerDrain( &self->client->ps, forcePower, 0 );
+					}
 				}
 				self->client->force.lightningDebounce += FORCE_DEBOUNCE_TIME;
 			}
