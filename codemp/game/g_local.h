@@ -597,6 +597,10 @@ struct gclient_s {
 	int			bodyGrabIndex;
 
 	int			pushEffectTime;
+	int			pushChargeStart;
+	qboolean	pushChargeFromCmd;
+	qboolean	pushChargeCmdHeld;
+	int			pushChargeGetupTime;
 
 	int			invulnerableTimer;
 
@@ -1427,6 +1431,7 @@ void ForceTeamHeal( gentity_t *self );
 void ForceTeamForceReplenish( gentity_t *self );
 void ForceSeeing( gentity_t *self );
 void ForceThrow( gentity_t *self, qboolean pull );
+void ForcePushChargeCommand( gentity_t *self, qboolean down );
 void ForceTelepathy(gentity_t *self);
 qboolean Jedi_DodgeEvasion( gentity_t *self, gentity_t *shooter, trace_t *tr, int hitLoc );
 

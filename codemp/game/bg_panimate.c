@@ -2290,6 +2290,66 @@ fin:
 }
 #endif
 
+//BOTH_FORCEPUSH_CHARGE and BOTH_FORCEPUSH_RELEASE aren't in animation.cfg: they're made when the file is loaded.
+//The charge is the part of BOTH_FORCE_DRAIN where the arm, held out, is drawn back to the chest; it's stretched
+//over the whole charge time and holds the last frame, the release is the whole push.
+//Sets without the drain anim split the push in two instead, the release carrying on from the held frame.
+#define FORCEPUSH_CHARGE_DRAIN_FIRST	6
+#define FORCEPUSH_CHARGE_DRAIN_FRAMES	28
+#define FORCEPUSH_CHARGE_PUSH_FRAMES	2
+#define FORCEPUSH_CHARGE_FRAMELERP		120
+
+static int bgForcePushChargeTime = 1250;
+
+static void BG_MakeForcePushChargeAnims( animation_t *animset )
+{
+	const animation_t *push = &animset[BOTH_FORCEPUSH];
+	const animation_t *drain = &animset[BOTH_FORCE_DRAIN];
+
+	if ( push->numFrames <= FORCEPUSH_CHARGE_PUSH_FRAMES || push->frameLerp <= 0 )
+	{//no (forward) push anim in this set, leave them empty
+		return;
+	}
+	animset[BOTH_FORCEPUSH_RELEASE] = *push;
+	animset[BOTH_FORCEPUSH_RELEASE].loopFrames = -1;
+	if ( drain->numFrames >= FORCEPUSH_CHARGE_DRAIN_FIRST+FORCEPUSH_CHARGE_DRAIN_FRAMES && drain->frameLerp > 0 )
+	{
+		animset[BOTH_FORCEPUSH_CHARGE] = *drain;
+		animset[BOTH_FORCEPUSH_CHARGE].firstFrame = drain->firstFrame + FORCEPUSH_CHARGE_DRAIN_FIRST;
+		animset[BOTH_FORCEPUSH_CHARGE].numFrames = FORCEPUSH_CHARGE_DRAIN_FRAMES;
+		animset[BOTH_FORCEPUSH_CHARGE].frameLerp = Q_max( 1, bgForcePushChargeTime/(FORCEPUSH_CHARGE_DRAIN_FRAMES-1) );
+	}
+	else
+	{
+		animset[BOTH_FORCEPUSH_CHARGE] = *push;
+		animset[BOTH_FORCEPUSH_CHARGE].numFrames = FORCEPUSH_CHARGE_PUSH_FRAMES;
+		animset[BOTH_FORCEPUSH_CHARGE].frameLerp = FORCEPUSH_CHARGE_FRAMELERP;
+		//starts on the frame the charge holds
+		animset[BOTH_FORCEPUSH_RELEASE].firstFrame = push->firstFrame + FORCEPUSH_CHARGE_PUSH_FRAMES - 1;
+		animset[BOTH_FORCEPUSH_RELEASE].numFrames = push->numFrames - FORCEPUSH_CHARGE_PUSH_FRAMES + 1;
+	}
+	animset[BOTH_FORCEPUSH_CHARGE].loopFrames = -1;
+}
+
+//ms to fully charge, every frame in game and cgame; remakes the loaded anims when it changes
+void BG_SetForcePushChargeAnimTime( int chargeTime )
+{
+	int i;
+
+	if ( chargeTime == bgForcePushChargeTime )
+	{
+		return;
+	}
+	bgForcePushChargeTime = chargeTime;
+	for ( i = 0; i < bgNumAllAnims; i++ )
+	{
+		if ( bgAllAnims[i].anims )
+		{
+			BG_MakeForcePushChargeAnims( bgAllAnims[i].anims );
+		}
+	}
+}
+
 /*
 ======================
 BG_ParseAnimationFile
@@ -2483,6 +2543,7 @@ int BG_ParseAnimationFile(const char *filename, animation_t *animset, qboolean i
 			animset[animNum].frameLerp = ceil(1000.0f / fps);
 		}
 	}
+	BG_MakeForcePushChargeAnims( animset );
 /*
 #ifdef _DEBUG
 	//Check the array, and print the ones that have nothing in them.

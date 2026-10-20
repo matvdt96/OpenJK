@@ -83,6 +83,22 @@ static void CG_Viewpos_f (void) {
 		(int)cg.refdef.viewangles[YAW]);
 }
 
+static qboolean CG_ServerHasPushCharge( void ) {
+	return Info_ValueForKey( CG_ConfigString( CS_SERVERINFO ), "g_pushCharge" )[0] ? qtrue : qfalse;
+}
+
+static void CG_ForceThrowDown_f( void ) {
+	if ( CG_ServerHasPushCharge() )
+		trap->SendClientCommand( "forcethrow 1" );
+	else
+		trap->SendConsoleCommand( "force_throw\n" );
+}
+
+static void CG_ForceThrowUp_f( void ) {
+	if ( CG_ServerHasPushCharge() )
+		trap->SendClientCommand( "forcethrow 0" );
+}
+
 /*
 =================
 CG_ScoresDown_f
@@ -293,7 +309,9 @@ int cmdcmp( const void *a, const void *b ) {
 }
 
 static consoleCommand_t	commands[] = {
+	{ "+force_throw",				CG_ForceThrowDown_f },
 	{ "+scores",					CG_ScoresDown_f },
+	{ "-force_throw",				CG_ForceThrowUp_f },
 	{ "-scores",					CG_ScoresUp_f },
 	{ "briefing",					CG_SiegeBriefing_f },
 	{ "clientlist",					CG_ClientList_f },

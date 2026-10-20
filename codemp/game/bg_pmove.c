@@ -7017,7 +7017,17 @@ static void PM_Weapon( void )
 		switch(pm->ps->forceHandExtend)
 		{
 		case HANDEXTEND_FORCEPUSH:
-			desiredAnim = BOTH_FORCEPUSH;
+			if ( pm->ps->torsoAnim == BOTH_FORCEPUSH_CHARGE || pm->ps->torsoAnim == BOTH_FORCEPUSH_RELEASE )
+			{//released a charge: push from the charging pose
+				desiredAnim = BOTH_FORCEPUSH_RELEASE;
+			}
+			else
+			{
+				desiredAnim = BOTH_FORCEPUSH;
+			}
+			break;
+		case HANDEXTEND_FORCEPUSH_CHARGE:
+			desiredAnim = BOTH_FORCEPUSH_CHARGE;
 			break;
 		case HANDEXTEND_FORCEPULL:
 			desiredAnim = BOTH_FORCEPULL;

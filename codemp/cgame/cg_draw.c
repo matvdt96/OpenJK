@@ -7943,6 +7943,53 @@ static void CG_Draw2DScreenTints( void )
 	}
 }
 
+//charge bar of a held force push, under the crosshair; the charge starts with the snapshot that first has the pose
+static void CG_DrawForcePushCharge( void )
+{
+	static int	chargeStart;
+	const float	w = 80.0f, h = 6.0f;
+	const float	x = (SCREEN_WIDTH-w)/2, y = SCREEN_HEIGHT/2+28;
+	vec4_t		fillColor = { 0.4f, 0.7f, 1.0f, 0.8f };
+	vec4_t		backColor = { 0.0f, 0.0f, 0.0f, 0.5f };
+	vec4_t		edgeColor = { 0.0f, 0.0f, 0.0f, 1.0f };
+	int			held, threshold;
+	float		frac;
+
+	if ( cg.snap->ps.forceHandExtend != HANDEXTEND_FORCEPUSH_CHARGE )
+	{
+		chargeStart = 0;
+		return;
+	}
+	if ( !chargeStart || chargeStart > cg.time )
+	{
+		chargeStart = cg.snap->serverTime;
+	}
+
+	held = cg.time - chargeStart;
+	threshold = g_pushChargeThreshold.integer;
+	if ( held < threshold )
+	{
+		return;
+	}
+
+	frac = 1.0f;
+	if ( g_pushChargeTime.integer > 0 )
+	{
+		frac = Com_Clamp( 0.0f, 1.0f, (float)(held - threshold) / g_pushChargeTime.integer );
+	}
+	if ( frac >= 1.0f )
+	{//full: white
+		fillColor[0] = fillColor[1] = fillColor[2] = 1.0f;
+	}
+
+	CG_FillRect( x, y, w, h, backColor );
+	if ( frac > 0.0f )
+	{
+		CG_FillRect( x+1, y+1, (w-2)*frac, h-2, fillColor );
+	}
+	CG_DrawRect( x, y, w, h, 1.0f, edgeColor );
+}
+
 static void CG_Draw2D( void ) {
 	float			inTime = cg.invenSelectTime+WEAPON_SELECT_TIME;
 	float			wpTime = cg.weaponSelectTime+WEAPON_SELECT_TIME;
@@ -8052,6 +8099,8 @@ static void CG_Draw2D( void ) {
 			CG_DrawAmmoWarning();
 
 			CG_DrawCrosshairNames();
+
+			CG_DrawForcePushCharge();
 
 			if (cg_drawStatus.integer)
 			{

@@ -218,6 +218,8 @@ typedef enum {
 	HANDEXTEND_DRAGGING,
 
 	HANDEXTEND_JEDITAUNT,
+
+	HANDEXTEND_FORCEPUSH_CHARGE,
 } forceHandAnims_t;
 
 typedef enum
@@ -1756,6 +1758,7 @@ qboolean	BG_PlayerTouchesItem( playerState_t *ps, entityState_t *item, int atTim
 void	BG_InitAnimsets(void);
 void	BG_ClearAnimsets(void);
 int		BG_ParseAnimationFile(const char *filename, animation_t *animSet, qboolean isHumanoid);
+void	BG_SetForcePushChargeAnimTime( int chargeTime );
 #ifndef _GAME
 int		BG_ParseAnimationEvtFile( const char *as_filename, int animFileIndex, int eventFileIndex );
 #endif

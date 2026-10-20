@@ -4921,6 +4921,43 @@ static void Controls_GetKeyAssignment( const char *command, int *twokeys )
 	}
 }
 
+static qboolean Controls_ForceThrowHold( void )
+{
+	return ( DC->getCVarValue && DC->getCVarValue( "ui_forceThrowHold" ) ) ? qtrue : qfalse;
+}
+
+static const char *Controls_BoundCommand( const char *command )
+{
+	if ( Controls_ForceThrowHold() && !Q_stricmp( command, "force_throw" ) )
+		return "+force_throw";
+	return command;
+}
+
+static void Controls_MigrateForceThrow( void )
+{
+	const char	*from, *to;
+	char		b[256];
+	int			j;
+
+	if ( !DC->setBinding )
+		return;
+
+	if ( Controls_ForceThrowHold() ) {
+		from = "force_throw";
+		to = "+force_throw";
+	}
+	else {
+		from = "+force_throw";
+		to = "force_throw";
+	}
+
+	for ( j=0; j<MAX_KEYS; j++ ) {
+		DC->getBindingBuf( j, b, sizeof( b ) );
+		if ( *b && !Q_stricmp( b, from ) )
+			DC->setBinding( j, to );
+	}
+}
+
 /*
 =================
 Controls_GetConfig
@@ -4930,9 +4967,11 @@ void Controls_GetConfig( void )
 {
 	size_t	i;
 
+	Controls_MigrateForceThrow();
+
 	// iterate each command, get its numeric binding
 	for ( i=0; i < g_bindCount; i++ )
-		Controls_GetKeyAssignment( g_bindCommands[i], g_bindKeys[i] );
+		Controls_GetKeyAssignment( Controls_BoundCommand( g_bindCommands[i] ), g_bindKeys[i] );
 }
 
 /*
@@ -4947,10 +4986,10 @@ void Controls_SetConfig( void )
 	// iterate each command, get its numeric binding
 	for ( i=0; i<g_bindCount; i++ ) {
 		if ( g_bindKeys[i][0] != -1 ) {
-			DC->setBinding( g_bindKeys[i][0], g_bindCommands[i] );
+			DC->setBinding( g_bindKeys[i][0], Controls_BoundCommand( g_bindCommands[i] ) );
 
 			if ( g_bindKeys[i][1] != -1 )
-				DC->setBinding( g_bindKeys[i][1], g_bindCommands[i] );
+				DC->setBinding( g_bindKeys[i][1], Controls_BoundCommand( g_bindCommands[i] ) );
 		}
 	}
 }

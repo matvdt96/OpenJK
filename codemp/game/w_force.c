@@ -2918,7 +2918,42 @@ float forcePushPullRadius[NUM_FORCE_POWER_LEVELS] =
 //rwwFIXMEFIXME: incorporate this into the below function? Currently it's only being used by jedi AI
 
 extern void Touch_Button(gentity_t *ent, gentity_t *other, trace_t *trace );
-void ForceThrow( gentity_t *self, qboolean pull )
+static qboolean ForceThrowAllowed( gentity_t *self, qboolean pull )
+{
+	if (self->client->ps.forceHandExtend != HANDEXTEND_NONE && (self->client->ps.forceHandExtend != HANDEXTEND_KNOCKDOWN || !G_InGetUpAnim(&self->client->ps)))
+	{
+		return qfalse;
+	}
+
+	if (!g_useWhileThrowing.integer && self->client->ps.saberInFlight)
+	{
+		return qfalse;
+	}
+
+	if (self->client->ps.weaponTime > 0)
+	{
+		return qfalse;
+	}
+
+	if ( self->health <= 0 )
+	{
+		return qfalse;
+	}
+	if ( self->client->ps.powerups[PW_DISINT_4] > level.time )
+	{
+		return qfalse;
+	}
+
+	if ( !WP_ForcePowerUsable( self, pull ? FP_PULL : FP_PUSH ) )
+	{
+		return qfalse;
+	}
+
+	return qtrue;
+}
+
+//charge: 0..1, how long a held force push was charged (0 = a normal push)
+static void ForceThrowCharged( gentity_t *self, qboolean pull, float charge )
 {
 	//shove things in front of you away
 	float		dist;
@@ -2943,29 +2978,12 @@ void ForceThrow( gentity_t *self, qboolean pull )
 	vec3_t		thispush_org;
 	vec3_t		tfrom, tto, fwd, a;
 	int			powerUse = 0;
+	float		powerScale = 1.0f + (g_pushChargeScale.value - 1.0f) * charge;
+	qboolean	fullCharge = (charge >= 1.0f && g_pushChargeKnockdown.integer) ? qtrue : qfalse;
 
 	visionArc = 0;
 
-	if (self->client->ps.forceHandExtend != HANDEXTEND_NONE && (self->client->ps.forceHandExtend != HANDEXTEND_KNOCKDOWN || !G_InGetUpAnim(&self->client->ps)))
-	{
-		return;
-	}
-
-	if (!g_useWhileThrowing.integer && self->client->ps.saberInFlight)
-	{
-		return;
-	}
-
-	if (self->client->ps.weaponTime > 0)
-	{
-		return;
-	}
-
-	if ( self->health <= 0 )
-	{
-		return;
-	}
-	if ( self->client->ps.powerups[PW_DISINT_4] > level.time )
+	if ( !ForceThrowAllowed( self, pull ) )
 	{
 		return;
 	}
@@ -2976,11 +2994,6 @@ void ForceThrow( gentity_t *self, qboolean pull )
 	else
 	{
 		powerUse = FP_PUSH;
-	}
-
-	if ( !WP_ForcePowerUsable( self, powerUse ) )
-	{
-		return;
 	}
 
 	// fix: rocket lock bug
@@ -3334,6 +3347,7 @@ void ForceThrow( gentity_t *self, qboolean pull )
 		for ( x = 0; x < ent_count; x++ )
 		{
 			int modPowerLevel = powerLevel;
+			float chargeThrough = 1.0f;
 
 
 			if (push_list[x]->client)
@@ -3345,7 +3359,19 @@ void ForceThrow( gentity_t *self, qboolean pull )
 				}
 			}
 
-			pushPower = 256*modPowerLevel;
+			pushPower = (int)(256*modPowerLevel*powerScale);
+
+			if (modPowerLevel < powerLevel && charge > 0.0f)
+			{ //absorbed: part of a charged push still gets through
+				int through;
+
+				chargeThrough = g_pushChargeAbsorb.value;
+				through = (int)(256*powerLevel*powerScale*chargeThrough*charge);
+				if (through > pushPower)
+				{
+					pushPower = through;
+				}
+			}
 
 			if (push_list[x]->client)
 			{
@@ -3360,6 +3386,7 @@ void ForceThrow( gentity_t *self, qboolean pull )
 			{//FIXME: make enemy jedi able to hunker down and resist this?
 				int otherPushPower = push_list[x]->client->ps.fd.forcePowerLevel[powerUse];
 				qboolean canPullWeapon = qtrue;
+				qboolean countered = qfalse;
 				float dirLen = 0;
 
 				if ( g_debugMelee.integer )
@@ -3385,7 +3412,7 @@ void ForceThrow( gentity_t *self, qboolean pull )
 					}
 				}
 
-				if (otherPushPower && CanCounterThrow(push_list[x], self, pull))
+				if (otherPushPower && !fullCharge && CanCounterThrow(push_list[x], self, pull))
 				{
 					if ( pull )
 					{
@@ -3416,6 +3443,7 @@ void ForceThrow( gentity_t *self, qboolean pull )
 					{
 						pushPowerMod = 0;
 						canPullWeapon = qfalse;
+						countered = qtrue;
 					}
 					else
 					{
@@ -3482,7 +3510,17 @@ void ForceThrow( gentity_t *self, qboolean pull )
 					VectorSubtract( thispush_org, self->client->ps.origin, pushDir );
 				}
 
-				if ((modPowerLevel > otherPushPower || push_list[x]->client->ps.m_iVehicleNum) && push_list[x]->client)
+				if (fullCharge && modPowerLevel == powerLevel &&
+					push_list[x]->client->ps.forceHandExtend != HANDEXTEND_KNOCKDOWN &&
+					BG_KnockDownable(&push_list[x]->client->ps))
+				{ //a fully charged push knocks down anyone it reaches
+					push_list[x]->client->ps.forceHandExtend = HANDEXTEND_KNOCKDOWN;
+					push_list[x]->client->ps.forceHandExtendTime = level.time + 700;
+					push_list[x]->client->ps.forceDodgeAnim = 0;
+					push_list[x]->client->ps.quickerGetup = qtrue;
+					push_list[x]->client->pushChargeGetupTime = -1;
+				}
+				else if ((modPowerLevel > otherPushPower || push_list[x]->client->ps.m_iVehicleNum) && push_list[x]->client)
 				{
 					if (modPowerLevel == FORCE_LEVEL_3 &&
 						push_list[x]->client->ps.forceHandExtend != HANDEXTEND_KNOCKDOWN)
@@ -3564,6 +3602,12 @@ void ForceThrow( gentity_t *self, qboolean pull )
 					else
 					{
 						push_list[x]->client->ps.velocity[2] = pushDir[2]*pushPowerMod;
+					}
+
+					if (charge > 0.0f && !countered &&
+						push_list[x]->client->ps.velocity[2] < g_pushChargeLift.value*charge*chargeThrough)
+					{ //a charged push throws them up into the air
+						push_list[x]->client->ps.velocity[2] = g_pushChargeLift.value*charge*chargeThrough;
 					}
 				}
 			}
@@ -3681,6 +3725,136 @@ void ForceThrow( gentity_t *self, qboolean pull )
 	{
 		self->client->ps.fd.forceGripBeingGripped = 0;
 	}
+}
+
+void ForceThrow( gentity_t *self, qboolean pull )
+{
+	ForceThrowCharged( self, pull, 0.0f );
+}
+
+static void ForcePushChargeStart( gentity_t *self, qboolean fromCmd )
+{
+	if ( (self->client->ps.saberLockTime > level.time && self->client->ps.saberLockFrame) ||
+		self->client->ps.forceHandExtend != HANDEXTEND_NONE ||
+		self->client->ps.fd.forceGripBeingGripped > level.time )
+	{ //no charging in a saber lock, while getting up or when gripped, push right away
+		ForceThrow( self, qfalse );
+		return;
+	}
+
+	if ( !ForceThrowAllowed( self, qfalse ) )
+	{
+		return;
+	}
+
+	self->client->pushChargeStart = level.time;
+	self->client->pushChargeFromCmd = fromCmd;
+	self->client->ps.forceHandExtend = HANDEXTEND_FORCEPUSH_CHARGE;
+	self->client->ps.forceHandExtendTime = level.time + 1000;
+}
+
+static void ForcePushChargeStop( gentity_t *self )
+{
+	self->client->pushChargeStart = 0;
+	if ( self->client->ps.forceHandExtend == HANDEXTEND_FORCEPUSH_CHARGE )
+	{
+		self->client->ps.forceHandExtend = HANDEXTEND_NONE;
+		self->client->ps.forceHandExtendTime = 0;
+	}
+}
+
+void ForcePushChargeCommand( gentity_t *self, qboolean down )
+{
+	if ( !down )
+	{
+		self->client->pushChargeCmdHeld = qfalse;
+		return;
+	}
+
+	if ( self->client->pushChargeCmdHeld )
+	{ //key repeat
+		return;
+	}
+	self->client->pushChargeCmdHeld = qtrue;
+
+	if ( level.intermissiontime ||
+		self->health <= 0 ||
+		self->client->sess.sessionTeam == TEAM_SPECTATOR ||
+		self->client->tempSpectate >= level.time )
+	{
+		return;
+	}
+
+	if ( !g_pushCharge.integer )
+	{
+		ForceThrow( self, qfalse );
+		return;
+	}
+
+	if ( !self->client->pushChargeStart )
+	{
+		ForcePushChargeStart( self, qtrue );
+	}
+}
+
+static void ForcePushChargeUpdate( gentity_t *self, usercmd_t *ucmd )
+{
+	int held, threshold;
+	float charge;
+
+	if ( !g_pushCharge.integer || self->health <= 0 ||
+		self->client->ps.forceHandExtend != HANDEXTEND_FORCEPUSH_CHARGE )
+	{ //charge lost, also when something else took over the hands (like a knockdown)
+		ForcePushChargeStop( self );
+		return;
+	}
+
+	if ( self->client->ps.fd.forceGripBeingGripped > level.time )
+	{ //gripped: let it go now, so it still breaks the grip
+	}
+	else if ( self->client->pushChargeFromCmd )
+	{
+		if ( self->client->pushChargeCmdHeld )
+		{ //still charging
+			self->client->ps.forceHandExtendTime = level.time + 1000;
+			return;
+		}
+	}
+	else
+	{
+		if ( self->client->ps.fd.forcePowerSelected != FP_PUSH )
+		{
+			ForcePushChargeStop( self );
+			return;
+		}
+		if ( ucmd->buttons & BUTTON_FORCEPOWER )
+		{ //still charging
+			self->client->ps.forceHandExtendTime = level.time + 1000;
+			return;
+		}
+	}
+
+	held = level.time - self->client->pushChargeStart;
+	threshold = g_pushChargeThreshold.integer;
+	ForcePushChargeStop( self );
+
+	if ( held < threshold )
+	{
+		ForceThrow( self, qfalse );
+		return;
+	}
+
+	charge = 1.0f;
+	if ( g_pushChargeTime.integer > 0 )
+	{
+		charge = (float)(held - threshold) / g_pushChargeTime.integer;
+		if ( charge > 1.0f )
+		{
+			charge = 1.0f;
+		}
+	}
+
+	ForceThrowCharged( self, qfalse, charge );
 }
 
 void WP_ForcePowerStop( gentity_t *self, forcePowers_t forcePower )
@@ -4458,7 +4632,17 @@ int WP_DoSpecificPower( gentity_t *self, usercmd_t *ucmd, forcePowers_t forcepow
 		{ //need to release before we can use nonhold powers again
 			break;
 		}
-		ForceThrow(self, qfalse);
+		if (g_pushCharge.integer && !(self->r.svFlags & SVF_BOT))
+		{
+			if (!self->client->pushChargeStart)
+			{
+				ForcePushChargeStart(self, qfalse);
+			}
+		}
+		else
+		{
+			ForceThrow(self, qfalse);
+		}
 		self->client->ps.fd.forceButtonNeedRelease = 1;
 		break;
 	case FP_PULL:
@@ -5068,6 +5252,34 @@ void WP_ForcePowersUpdate( gentity_t *self, usercmd_t *ucmd )
 		self->client->ps.zoomTime = 0;
 	}
 
+	if ( self->client->pushChargeGetupTime )
+	{ //knocked down by a charged push: down until landing, then a moment on the ground
+		if ( self->client->ps.forceHandExtend != HANDEXTEND_KNOCKDOWN || self->client->ps.forceDodgeAnim )
+		{ //getting up already
+			self->client->pushChargeGetupTime = 0;
+		}
+		else if ( self->client->ps.groundEntityNum == ENTITYNUM_NONE )
+		{
+			self->client->pushChargeGetupTime = -1;
+			if ( self->client->ps.forceHandExtendTime < level.time + 100 )
+			{
+				self->client->ps.forceHandExtendTime = level.time + 100;
+			}
+		}
+		else
+		{
+			if ( self->client->pushChargeGetupTime < 0 )
+			{ //just landed: a normal getup, not the kip-up that jumps
+				self->client->pushChargeGetupTime = level.time + g_pushChargeGetup.integer;
+				self->client->ps.quickerGetup = qfalse;
+			}
+			if ( self->client->ps.forceHandExtendTime < self->client->pushChargeGetupTime )
+			{
+				self->client->ps.forceHandExtendTime = self->client->pushChargeGetupTime;
+			}
+		}
+	}
+
 	if (self->client->ps.forceHandExtend == HANDEXTEND_KNOCKDOWN &&
 		self->client->ps.forceHandExtendTime >= level.time)
 	{
@@ -5093,8 +5305,10 @@ void WP_ForcePowersUpdate( gentity_t *self, usercmd_t *ucmd )
 			}
 			else
 			{ //hmm.. ok.. no more getting up on your own, you've gotta push something, unless..
-				if ((level.time-self->client->ps.forceHandExtendTime) > 4000)
+				if ((level.time-self->client->ps.forceHandExtendTime) > 4000 ||
+					self->client->pushChargeGetupTime > 0)
 				{ //4 seconds elapsed, I guess they're too dumb to push something to get up!
+					self->client->pushChargeGetupTime = 0;
 					if (self->client->pers.cmd.upmove &&
 						self->client->ps.fd.forcePowerLevel[FP_LEVITATION] > FORCE_LEVEL_1)
 					{ //force getup
@@ -5396,6 +5610,11 @@ void WP_ForcePowersUpdate( gentity_t *self, usercmd_t *ucmd )
 				WP_ForcePowerStop(self, FP_DRAIN);
 			}
 		}
+	}
+
+	if ( self->client->pushChargeStart )
+	{
+		ForcePushChargeUpdate( self, ucmd );
 	}
 
 	if ( (ucmd->buttons & BUTTON_FORCEPOWER) &&

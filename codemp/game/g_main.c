@@ -2932,6 +2932,8 @@ void G_RunFrame( int levelTime ) {
 	void		*timer_Queues;
 #endif
 
+	BG_SetForcePushChargeAnimTime( g_pushChargeThreshold.integer + Q_max( 0, g_pushChargeTime.integer ) );
+
 	if (level.gametype == GT_SIEGE &&
 		g_siegeRespawn.integer &&
 		g_siegeRespawnCheck < level.time)

@@ -438,6 +438,10 @@ typedef struct centity_s {
 
 	int				bodyFadeTime;
 	vec3_t			pushEffectOrigin;
+	int				pushChargeStartTime;	// cg.time the charged push pose showed up, 0 = not charging
+	float			pushChargeFrac;			// 0..1 while charging
+	float			pushChargeReleased;		// charge of the last released push, scales its wave
+	qboolean		pushChargeSound;		// the charge-up sound is playing
 
 	cgLoopSound_t	loopingSound[MAX_CG_LOOPSOUNDS];
 	int				numLoopingSounds;
@@ -1791,6 +1795,7 @@ void CG_CreateNPCClient(clientInfo_t **ci);
 void CG_DestroyNPCClient(clientInfo_t **ci);
 
 void CG_Player( centity_t *cent );
+void CG_AddForcePushDust( void );
 void CG_ResetPlayerEntity( centity_t *cent );
 void CG_AddRefEntityWithPowerups( refEntity_t *ent, entityState_t *state, int team );
 void CG_NewClientInfo( int clientNum, qboolean entitiesInitialized );

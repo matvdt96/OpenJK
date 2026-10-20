@@ -1270,6 +1270,19 @@ void Cmd_SiegeClass_f( gentity_t *ent )
 
 /*
 =================
+Cmd_ForceThrow_f
+=================
+*/
+void Cmd_ForceThrow_f( gentity_t *ent )
+{
+	char arg[MAX_TOKEN_CHARS] = {0};
+
+	trap->Argv( 1, arg, sizeof( arg ) );
+	ForcePushChargeCommand( ent, atoi( arg ) ? qtrue : qfalse );
+}
+
+/*
+=================
 Cmd_ForceChanged_f
 =================
 */
@@ -3404,6 +3417,7 @@ command_t commands[] = {
 	{ "follownext",			Cmd_FollowNext_f,			CMD_NOINTERMISSION },
 	{ "followprev",			Cmd_FollowPrev_f,			CMD_NOINTERMISSION },
 	{ "forcechanged",		Cmd_ForceChanged_f,			0 },
+	{ "forcethrow",			Cmd_ForceThrow_f,			0 },
 	{ "gc",					Cmd_GameCommand_f,			CMD_NOINTERMISSION },
 	{ "give",				Cmd_Give_f,					CMD_CHEAT|CMD_ALIVE|CMD_NOINTERMISSION },
 	{ "giveother",			Cmd_GiveOther_f,			CMD_CHEAT|CMD_NOINTERMISSION },

@@ -4832,6 +4832,233 @@ static void CG_PlayerSplash( centity_t *cent ) {
 }
 
 #define REFRACT_EFFECT_DURATION		500
+
+//dust thrown up along the ground by a charged force push, ring after ring out from the pusher
+#define MAX_PUSH_DUST_WAVES		8
+#define PUSH_DUST_RING_STEP		64
+#define PUSH_DUST_RING_TIME		35
+#define PUSH_DUST_MIN_RANGE		128
+#define PUSH_DUST_CHARGE_RANGE	384
+#define PUSH_DUST_HALF_ARC		40
+
+typedef struct pushDustWave_s {
+	int		startTime;
+	vec3_t	org;
+	float	yaw;
+	float	range;
+	int		rings;
+} pushDustWave_t;
+
+static pushDustWave_t pushDustWaves[MAX_PUSH_DUST_WAVES];
+
+static void CG_StartForcePushDust( centity_t *cent, float charge )
+{
+	pushDustWave_t *w = &pushDustWaves[0];
+	int i;
+
+	for ( i = 0; i < MAX_PUSH_DUST_WAVES; i++ )
+	{
+		if ( !pushDustWaves[i].startTime )
+		{
+			w = &pushDustWaves[i];
+			break;
+		}
+		if ( pushDustWaves[i].startTime < w->startTime )
+		{
+			w = &pushDustWaves[i];
+		}
+	}
+
+	w->startTime = cg.time;
+	VectorCopy( cent->lerpOrigin, w->org );
+	w->yaw = cent->lerpAngles[YAW];
+	w->range = PUSH_DUST_MIN_RANGE + PUSH_DUST_CHARGE_RANGE*charge;
+	w->rings = 0;
+}
+
+void CG_AddForcePushDust( void )
+{
+	static char	fxName[MAX_QPATH];
+	static int	fxHandle;
+	int			i, j;
+
+	if ( Q_stricmp( fxName, cg_pushChargeDustFx.string ) )
+	{
+		Q_strncpyz( fxName, cg_pushChargeDustFx.string, sizeof( fxName ) );
+		fxHandle = fxName[0] ? trap->FX_RegisterEffect( fxName ) : 0;
+	}
+
+	for ( i = 0; i < MAX_PUSH_DUST_WAVES; i++ )
+	{
+		pushDustWave_t *w = &pushDustWaves[i];
+		int due;
+
+		if ( !w->startTime )
+		{
+			continue;
+		}
+		if ( w->startTime > cg.time || !fxHandle )
+		{
+			w->startTime = 0;
+			continue;
+		}
+
+		due = (cg.time - w->startTime) / PUSH_DUST_RING_TIME + 1;
+		while ( w->startTime && w->rings < due )
+		{
+			float dist = (w->rings+1) * PUSH_DUST_RING_STEP;
+			int puffs = Com_Clampi( 1, 5, (int)(dist/96.0f) + 1 );
+
+			if ( dist > w->range )
+			{
+				w->startTime = 0;
+				break;
+			}
+
+			for ( j = 0; j < puffs; j++ )
+			{
+				vec3_t	ang, dir, start, end;
+				trace_t	tr;
+
+				VectorSet( ang, 0, w->yaw, 0 );
+				if ( puffs > 1 )
+				{
+					ang[YAW] += -PUSH_DUST_HALF_ARC + (2*PUSH_DUST_HALF_ARC*j)/(float)(puffs-1);
+				}
+				AngleVectors( ang, dir, NULL, NULL );
+				VectorMA( w->org, dist, dir, start );
+				VectorCopy( start, end );
+				start[2] += 32;
+				end[2] -= 96;
+
+				CG_Trace( &tr, start, NULL, NULL, end, ENTITYNUM_NONE, MASK_SOLID );
+				if ( tr.fraction < 1.0f && !tr.startsolid && !tr.allsolid )
+				{
+					trap->FX_PlayEffectID( fxHandle, tr.endpos, tr.plane.normal, -1, -1, qfalse );
+				}
+			}
+			w->rings++;
+		}
+	}
+}
+
+//charged force push: 0..1 while cent holds the charging pose (0 during a short press), else -1;
+//everyone is timed from when the pose showed up
+static float CG_ForcePushChargeFrac( centity_t *cent )
+{
+	int held, threshold;
+
+	if ( !cg_pushChargeFx.integer
+		|| cent->currentState.torsoAnim != BOTH_FORCEPUSH_CHARGE
+		|| (cent->currentState.eFlags & EF_DEAD) )
+	{
+		if ( cent->pushChargeStartTime )
+		{//charge over: if it went off, its wave and dust grow with it
+			cent->pushChargeReleased = 0.0f;
+			if ( cg_pushChargeFx.integer && cent->currentState.torsoAnim == BOTH_FORCEPUSH_RELEASE )
+			{
+				cent->pushChargeReleased = cent->pushChargeFrac;
+				if ( cent->pushChargeFrac > 0.0f )
+				{
+					CG_StartForcePushDust( cent, cent->pushChargeFrac );
+				}
+			}
+			if ( cent->pushChargeSound )
+			{
+				trap->S_MuteSound( cent->currentState.number, CHAN_ITEM );
+				cent->pushChargeSound = qfalse;
+			}
+			cent->pushChargeStartTime = 0;
+			cent->pushChargeFrac = 0.0f;
+		}
+		return -1.0f;
+	}
+
+	if ( !cent->pushChargeStartTime )
+	{
+		cent->pushChargeStartTime = cg.time;
+	}
+	held = cg.time - cent->pushChargeStartTime;
+	threshold = g_pushChargeThreshold.integer;
+	if ( held < threshold )
+	{
+		cent->pushChargeFrac = 0.0f;
+		return 0.0f;
+	}
+
+	if ( !cent->pushChargeSound )
+	{//not a tap: it's a real charge now
+		trap->S_StartSound( NULL, cent->currentState.number, CHAN_ITEM, trap->S_RegisterSound( "sound/weapons/force/jumpbuild.wav" ) );
+		cent->pushChargeSound = qtrue;
+	}
+	cent->pushChargeFrac = 1.0f;
+	if ( g_pushChargeTime.integer > 0 )
+	{
+		cent->pushChargeFrac = Com_Clamp( 0.0f, 1.0f, (float)(held - threshold) / g_pushChargeTime.integer );
+	}
+	return cent->pushChargeFrac;
+}
+
+//gathering force at the hand: a small pulsing refraction growing with the charge
+static void CG_ForcePushChargeEffect( centity_t *cent, vec3_t org, float frac )
+{
+	refEntity_t	ent;
+	vec3_t		ang;
+	float		pulse = 1.0f + ((frac >= 1.0f) ? 0.15f : 0.06f)*sin( cg.time*0.015f );
+	float		scale = (0.1f + 0.25f*frac)*pulse;
+	float		vLen;
+
+	if ( !cg_renderToTextureFX.integer
+		|| (cent->currentState.number == cg.snap->ps.clientNum && !cg.renderingThirdPerson) )
+	{//not right in front of the first person view
+		return;
+	}
+
+	memset( &ent, 0, sizeof( ent ) );
+	ent.shaderTime = cent->pushChargeStartTime / 1000.0f;
+	VectorCopy( org, ent.origin );
+	VectorSubtract( ent.origin, cg.refdef.vieworg, ent.axis[0] );
+	vLen = VectorLength( ent.axis[0] );
+	if ( vLen <= 0.1f )
+	{
+		return;
+	}
+	vectoangles( ent.axis[0], ang );
+	ang[ROLL] += 180.0f;
+	AnglesToAxis( ang, ent.axis );
+
+	//radius must be a power of 2, and is the actual captured texture size
+	if ( vLen < 128 )
+	{
+		ent.radius = 256;
+	}
+	else if ( vLen < 256 )
+	{
+		ent.radius = 128;
+	}
+	else if ( vLen < 512 )
+	{
+		ent.radius = 64;
+	}
+	else
+	{
+		ent.radius = 32;
+	}
+
+	VectorScale( ent.axis[0], scale, ent.axis[0] );
+	VectorScale( ent.axis[1], scale, ent.axis[1] );
+	VectorScale( ent.axis[2], scale, ent.axis[2] );
+
+	ent.hModel = cgs.media.halfShieldModel;
+	ent.customShader = cgs.media.refractionShader;
+	ent.nonNormalizedAxes = qtrue;
+	ent.renderfx = (RF_DISTORTION|RF_FORCE_ENT_ALPHA);
+	ent.shaderRGBA[0] = 255;
+	ent.shaderRGBA[1] = 255;
+	ent.shaderRGBA[2] = 255;
+	ent.shaderRGBA[3] = 60 + 140*frac;
+	trap->R_AddRefEntityToScene( &ent );
+}
 static void CG_ForcePushBlur( vec3_t org, centity_t *cent )
 {
 	if (!cent || !cg_renderToTextureFX.integer)
@@ -4913,6 +5140,7 @@ static void CG_ForcePushBlur( vec3_t org, centity_t *cent )
 		{
 			scale = 0.2f;
 		}
+		scale *= 1.0f + cent->pushChargeReleased;
 
 		//start alpha at 244, fade to 10
 		alpha = (float)tDif*0.488f;
@@ -9710,6 +9938,23 @@ void CG_Player( centity_t *cent ) {
 		CG_ForcePushBodyBlur(cent);
 	}
 
+	{//charging a force push
+		float chargeFrac = CG_ForcePushChargeFrac( cent );
+		if ( chargeFrac >= 0.0f )
+		{
+			vec3_t efOrg;
+			if (!gotLHandMatrix)
+			{
+				trap->G2API_GetBoltMatrix(cent->ghoul2, 0, ci->bolt_lhand, &lHandMatrix, cent->turAngles, cent->lerpOrigin, cg.time, cgs.gameModels, cent->modelScale);
+				gotLHandMatrix = qtrue;
+			}
+			efOrg[0] = lHandMatrix.matrix[0][3];
+			efOrg[1] = lHandMatrix.matrix[1][3];
+			efOrg[2] = lHandMatrix.matrix[2][3];
+			CG_ForcePushChargeEffect( cent, efOrg, chargeFrac );
+		}
+	}
+
 	if ( cent->currentState.powerups & (1 << PW_DISINT_4) )
 	{
 		vec3_t tAng;
@@ -9833,6 +10078,7 @@ void CG_Player( centity_t *cent ) {
 	else if (cent->bodyFadeTime)
 	{ //reset the counter for keeping track of push refraction effect state
 		cent->bodyFadeTime = 0;
+		cent->pushChargeReleased = 0.0f;
 	}
 
 	if (cent->currentState.weapon == WP_STUN_BATON && cent->currentState.number == cg.snap->ps.clientNum)
