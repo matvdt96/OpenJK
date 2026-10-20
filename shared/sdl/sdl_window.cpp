@@ -42,6 +42,7 @@ static float displayAspect;
 
 cvar_t *r_sdlDriver;
 cvar_t *r_allowSoftwareGL;
+cvar_t *r_preferWayland;
 
 // Window cvars
 cvar_t	*r_fullscreen = 0;
@@ -663,6 +664,76 @@ static rserr_t GLimp_SetMode(glconfig_t *glConfig, const windowDesc_t *windowDes
 	return RSERR_OK;
 }
 
+#if !defined(_WIN32) && !defined(MACOS_X)
+static qboolean waylandForced = qfalse;
+static qboolean waylandFailed = qfalse;
+#endif
+
+/*
+===============
+GLimp_PreferWayland
+
+Select the native Wayland video driver when running in a Wayland session,
+unless the user already chose a driver through SDL_VIDEODRIVER
+===============
+*/
+static void GLimp_PreferWayland( void )
+{
+#if !defined(_WIN32) && !defined(MACOS_X)
+	if ( waylandForced && !r_preferWayland->integer ) {
+		unsetenv( "SDL_VIDEODRIVER" );
+		waylandForced = qfalse;
+	}
+
+	if ( !r_preferWayland->integer || waylandFailed || waylandForced )
+		return;
+
+	if ( getenv( "SDL_VIDEODRIVER" ) || !getenv( "WAYLAND_DISPLAY" ) )
+		return;
+
+	setenv( "SDL_VIDEODRIVER", "wayland", 1 );
+	waylandForced = qtrue;
+#endif
+}
+
+/*
+===============
+GLimp_DropForcedWayland
+
+Tear down a failed Wayland attempt so the default video driver can be used.
+Returns qfalse if Wayland was not forced by GLimp_PreferWayland
+===============
+*/
+static qboolean GLimp_DropForcedWayland( void )
+{
+#if !defined(_WIN32) && !defined(MACOS_X)
+	if ( !waylandForced )
+		return qfalse;
+
+	if ( opengl_context ) {
+		SDL_GL_DeleteContext( opengl_context );
+		opengl_context = NULL;
+	}
+
+	if ( screen ) {
+		SDL_DestroyWindow( screen );
+		screen = NULL;
+	}
+
+	if ( SDL_WasInit( SDL_INIT_VIDEO ) )
+		SDL_QuitSubSystem( SDL_INIT_VIDEO );
+
+	unsetenv( "SDL_VIDEODRIVER" );
+	waylandForced = qfalse;
+	waylandFailed = qtrue;
+
+	Com_Printf( "...Wayland video driver failed, falling back to the default driver\n" );
+	return qtrue;
+#else
+	return qfalse;
+#endif
+}
+
 /*
 ===============
 GLimp_StartDriverAndSetMode
@@ -676,10 +747,14 @@ static qboolean GLimp_StartDriverAndSetMode(glconfig_t *glConfig, const windowDe
 	{
 		const char *driverName;
 
+		GLimp_PreferWayland();
+
 		if (SDL_Init(SDL_INIT_VIDEO) == -1)
 		{
 			Com_Printf( "SDL_Init( SDL_INIT_VIDEO ) FAILED (%s)\n", SDL_GetError());
-			return qfalse;
+
+			if ( !GLimp_DropForcedWayland() || SDL_Init(SDL_INIT_VIDEO) == -1 )
+				return qfalse;
 		}
 
 		driverName = SDL_GetCurrentVideoDriver();
@@ -734,6 +809,7 @@ window_t WIN_Init( const windowDesc_t *windowDesc, glconfig_t *glConfig )
 
 	r_sdlDriver			= Cvar_Get( "r_sdlDriver",			"",			CVAR_ROM );
 	r_allowSoftwareGL	= Cvar_Get( "r_allowSoftwareGL",	"0",		CVAR_ARCHIVE_ND|CVAR_LATCH );
+	r_preferWayland		= Cvar_Get( "r_preferWayland",		"1",		CVAR_ARCHIVE_ND|CVAR_LATCH, "Use the native Wayland video driver in Wayland sessions, falling back to the default driver (0 = SDL default)" );
 
 	// Window cvars
 	r_fullscreen		= Cvar_Get( "r_fullscreen",			"0",		CVAR_ARCHIVE|CVAR_LATCH );
@@ -757,7 +833,9 @@ window_t WIN_Init( const windowDesc_t *windowDesc, glconfig_t *glConfig )
 
 	// Create the window and set up the context
 	if(!GLimp_StartDriverAndSetMode( glConfig, windowDesc, r_mode->integer,
-										(qboolean)r_fullscreen->integer, (qboolean)r_noborder->integer ))
+										(qboolean)r_fullscreen->integer, (qboolean)r_noborder->integer )
+		&& ( !GLimp_DropForcedWayland() || !GLimp_StartDriverAndSetMode( glConfig, windowDesc, r_mode->integer,
+										(qboolean)r_fullscreen->integer, (qboolean)r_noborder->integer ) ))
 	{
 		if( r_mode->integer != R_MODE_FALLBACK )
 		{
