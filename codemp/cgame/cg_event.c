@@ -1824,6 +1824,14 @@ void CG_EntityEvent( centity_t *cent, vec3_t position ) {
 		break;
 		//End NPC sounds
 
+	case EV_FORCE_REPULSE:
+		DEBUGNAME("EV_FORCE_REPULSE");
+		if ( es->otherEntityNum >= 0 && es->otherEntityNum < ENTITYNUM_WORLD )
+		{
+			CG_ForceRepulseDust( &cg_entities[es->otherEntityNum], es->generic1/100.0f, es->eventParm*4.0f );
+		}
+		break;
+
 	case EV_SIEGESPEC:
 		DEBUGNAME("EV_SIEGESPEC");
 		if ( es->owner == cg.predictedPlayerState.clientNum )
@@ -1869,7 +1877,7 @@ void CG_EntityEvent( centity_t *cent, vec3_t position ) {
 					const char *strText = CG_GetStringEdString("MP_INGAME", "PICKUPLINE");
 
 					//Com_Printf("%s %s\n", strText, showPowersName[index]);
-					CG_CenterPrint( va("%s %s\n", strText, CG_GetStringEdString("SP_INGAME",showPowersName[index])), SCREEN_HEIGHT * 0.30, BIGCHAR_WIDTH );
+					CG_CenterPrint( va("%s %s\n", strText, CG_ForcePowerName(index)), SCREEN_HEIGHT * 0.30, BIGCHAR_WIDTH );
 				}
 
 				//Show the player their force selection bar in case picking the holocron up changed the current selection

@@ -601,6 +601,10 @@ struct gclient_s {
 	qboolean	pushChargeFromCmd;
 	qboolean	pushChargeCmdHeld;
 	int			pushChargeGetupTime;
+	int			repulseChargeStart;
+	qboolean	repulseChargeFromCmd;
+	qboolean	repulseChargeCmdHeld;
+	int			repulseNextTime;
 
 	int			invulnerableTimer;
 
@@ -1432,6 +1436,7 @@ void ForceTeamForceReplenish( gentity_t *self );
 void ForceSeeing( gentity_t *self );
 void ForceThrow( gentity_t *self, qboolean pull );
 void ForcePushChargeCommand( gentity_t *self, qboolean down );
+void ForceRepulseChargeCommand( gentity_t *self, qboolean down );
 void ForceTelepathy(gentity_t *self);
 qboolean Jedi_DodgeEvasion( gentity_t *self, gentity_t *shooter, trace_t *tr, int hitLoc );
 

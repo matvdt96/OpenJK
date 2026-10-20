@@ -99,6 +99,14 @@ static void CG_ForceThrowUp_f( void ) {
 		trap->SendClientCommand( "forcethrow 0" );
 }
 
+static void CG_ForceRepulseDown_f( void ) {
+	trap->SendClientCommand( "forcerepulse 1" );
+}
+
+static void CG_ForceRepulseUp_f( void ) {
+	trap->SendClientCommand( "forcerepulse 0" );
+}
+
 /*
 =================
 CG_ScoresDown_f
@@ -309,8 +317,10 @@ int cmdcmp( const void *a, const void *b ) {
 }
 
 static consoleCommand_t	commands[] = {
+	{ "+force_repulse",				CG_ForceRepulseDown_f },
 	{ "+force_throw",				CG_ForceThrowDown_f },
 	{ "+scores",					CG_ScoresDown_f },
+	{ "-force_repulse",				CG_ForceRepulseUp_f },
 	{ "-force_throw",				CG_ForceThrowUp_f },
 	{ "-scores",					CG_ScoresUp_f },
 	{ "briefing",					CG_SiegeBriefing_f },

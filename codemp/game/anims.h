@@ -1809,6 +1809,8 @@ typedef enum //# animNumber_e
 
 	BOTH_FORCEPUSH_CHARGE,	//# gathering a force push while it charges, holds on the last frame
 	BOTH_FORCEPUSH_RELEASE,	//# the push played when a charge is released
+	BOTH_FORCEREPULSE_CHARGE,	//# gathering a repulse while it charges, holds on the last frame
+	BOTH_FORCEREPULSE_RELEASE,	//# the arms opening out when a repulse is released
 
 	//# #eol
 	MAX_ANIMATIONS,

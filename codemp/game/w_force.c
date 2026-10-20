@@ -79,7 +79,8 @@ const int forcePowerMinRank[NUM_FORCE_POWER_LEVELS][NUM_FORCE_POWERS] = //0 == n
 		999,//FP_SEE,//duration
 		999,//FP_SABER_OFFENSE,
 		999,//FP_SABER_DEFENSE,
-		999//FP_SABERTHROW,
+		999,//FP_SABERTHROW,
+		999//FP_REPULSE,
 		//NUM_FORCE_POWERS
 	},
 	{
@@ -100,7 +101,8 @@ const int forcePowerMinRank[NUM_FORCE_POWER_LEVELS][NUM_FORCE_POWERS] = //0 == n
 		5,//FP_SEE,//duration
 		0,//FP_SABER_OFFENSE,
 		0,//FP_SABER_DEFENSE,
-		0//FP_SABERTHROW,
+		0,//FP_SABERTHROW,
+		10//FP_REPULSE,
 		//NUM_FORCE_POWERS
 	},
 	{
@@ -121,7 +123,8 @@ const int forcePowerMinRank[NUM_FORCE_POWER_LEVELS][NUM_FORCE_POWERS] = //0 == n
 		5,//FP_SEE,//duration
 		5,//FP_SABER_OFFENSE,
 		5,//FP_SABER_DEFENSE,
-		5//FP_SABERTHROW,
+		5,//FP_SABERTHROW,
+		10//FP_REPULSE,
 		//NUM_FORCE_POWERS
 	},
 	{
@@ -142,7 +145,8 @@ const int forcePowerMinRank[NUM_FORCE_POWER_LEVELS][NUM_FORCE_POWERS] = //0 == n
 		5,//FP_SEE,//duration
 		10,//FP_SABER_OFFENSE,
 		10,//FP_SABER_DEFENSE,
-		10//FP_SABERTHROW,
+		10,//FP_SABERTHROW,
+		10//FP_REPULSE,
 		//NUM_FORCE_POWERS
 	}
 };
@@ -159,6 +163,10 @@ void WP_InitForcePowers( gentity_t *ent ) {
 	int i, i_r, lastFPKnown = -1;
 	qboolean warnClient = qfalse, warnClientLimit = qfalse, didEvent = qfalse;
 	char userinfo[MAX_INFO_STRING], forcePowers[DEFAULT_FORCEPOWERS_LEN+1], readBuf[DEFAULT_FORCEPOWERS_LEN+1];
+	int fpDisabled = g_forcePowerDisable.integer;
+
+	if ( !g_repulse.integer )
+		fpDisabled |= (1 << FP_REPULSE);
 
 	// if server has no max rank, default to max (50)
 	if ( g_maxForceRank.integer <= 0 || g_maxForceRank.integer >= NUM_FORCE_MASTERY_LEVELS ) {
@@ -220,11 +228,16 @@ void WP_InitForcePowers( gentity_t *ent ) {
 
 	//rwwFIXMEFIXME: Temp
 	if ( ent->s.eType == ET_NPC && ent->s.number >= MAX_CLIENTS )
-		Q_strncpyz( userinfo, "forcepowers\\7-1-333003000313003120", sizeof( userinfo ) );
+		Q_strncpyz( userinfo, "forcepowers\\7-1-3330030003130031200", sizeof( userinfo ) );
 	else
 		trap->GetUserinfo( ent->s.number, userinfo, sizeof( userinfo ) );
 
 	Q_strncpyz( forcePowers, Info_ValueForKey( userinfo, "forcepowers" ), sizeof( forcePowers ) );
+
+	if ( strlen( forcePowers ) == DEFAULT_FORCEPOWERS_LEN-1 ) {
+		// saved before repulse was added
+		Q_strcat( forcePowers, sizeof( forcePowers ), "0" );
+	}
 
 	if ( strlen( forcePowers ) != DEFAULT_FORCEPOWERS_LEN ) {
 		Q_strncpyz( forcePowers, DEFAULT_FORCEPOWERS, sizeof( forcePowers ) );
@@ -237,14 +250,14 @@ void WP_InitForcePowers( gentity_t *ent ) {
 
 	if ( g_forceBasedTeams.integer ) {
 		if ( ent->client->sess.sessionTeam == TEAM_RED )
-			warnClient = !(BG_LegalizedForcePowers( forcePowers, sizeof (forcePowers), g_maxForceRank.integer, HasSetSaberOnly(), FORCE_DARKSIDE, level.gametype, g_forcePowerDisable.integer ));
+			warnClient = !(BG_LegalizedForcePowers( forcePowers, sizeof (forcePowers), g_maxForceRank.integer, HasSetSaberOnly(), FORCE_DARKSIDE, level.gametype, fpDisabled ));
 		else if ( ent->client->sess.sessionTeam == TEAM_BLUE )
-			warnClient = !(BG_LegalizedForcePowers( forcePowers, sizeof (forcePowers), g_maxForceRank.integer, HasSetSaberOnly(), FORCE_LIGHTSIDE, level.gametype, g_forcePowerDisable.integer ));
+			warnClient = !(BG_LegalizedForcePowers( forcePowers, sizeof (forcePowers), g_maxForceRank.integer, HasSetSaberOnly(), FORCE_LIGHTSIDE, level.gametype, fpDisabled ));
 		else
-			warnClient = !(BG_LegalizedForcePowers( forcePowers, sizeof (forcePowers), g_maxForceRank.integer, HasSetSaberOnly(), 0, level.gametype, g_forcePowerDisable.integer ));
+			warnClient = !(BG_LegalizedForcePowers( forcePowers, sizeof (forcePowers), g_maxForceRank.integer, HasSetSaberOnly(), 0, level.gametype, fpDisabled ));
 	}
 	else
-		warnClient = !(BG_LegalizedForcePowers( forcePowers, sizeof (forcePowers), g_maxForceRank.integer, HasSetSaberOnly(), 0, level.gametype, g_forcePowerDisable.integer ));
+		warnClient = !(BG_LegalizedForcePowers( forcePowers, sizeof (forcePowers), g_maxForceRank.integer, HasSetSaberOnly(), 0, level.gametype, fpDisabled ));
 
 	//rww - parse through the string manually and eat out all the appropriate data
 	i = 0;
@@ -587,7 +600,8 @@ int ForcePowerUsableOn(gentity_t *attacker, gentity_t *other, forcePowers_t forc
 
 	if (other && other->client &&
 		(forcePower == FP_PUSH ||
-		forcePower == FP_PULL))
+		forcePower == FP_PULL ||
+		forcePower == FP_REPULSE))
 	{
 		if (BG_InKnockDown(other->client->ps.legsAnim))
 		{
@@ -740,6 +754,7 @@ qboolean WP_ForcePowerUsable( gentity_t *self, forcePowers_t forcePower )
 				{
 				case FP_PUSH:
 				case FP_PULL:
+				case FP_REPULSE:
 				case FP_TELEPATHY:
 				case FP_GRIP:
 				case FP_LIGHTNING:
@@ -769,6 +784,7 @@ qboolean WP_ForcePowerUsable( gentity_t *self, forcePowers_t forcePower )
 				{
 				case FP_PUSH:
 				case FP_PULL:
+				case FP_REPULSE:
 				case FP_TELEPATHY:
 				case FP_GRIP:
 				case FP_LIGHTNING:
@@ -934,6 +950,10 @@ void WP_ForcePowerStart( gentity_t *self, forcePowers_t forcePower, int override
 		hearDist = 256;
 		break;
 	case FP_PULL:
+		hearable = qtrue;
+		hearDist = 256;
+		break;
+	case FP_REPULSE:
 		hearable = qtrue;
 		hearDist = 256;
 		break;
@@ -3857,6 +3877,323 @@ static void ForcePushChargeUpdate( gentity_t *self, usercmd_t *ucmd )
 	ForceThrowCharged( self, qfalse, charge );
 }
 
+//repulse: held to charge it from nothing, on release a wave all around throws enemies away
+static const float repulseLevelScale[NUM_FORCE_POWER_LEVELS] = { 0.0f, 0.5f, 0.75f, 1.0f };
+
+static qboolean ForceRepulseAllowed( gentity_t *self )
+{
+	if ( !g_repulse.integer )
+	{
+		return qfalse;
+	}
+	if ( self->client->ps.forceHandExtend != HANDEXTEND_NONE ||
+		self->client->ps.weaponTime > 0 ||
+		self->health <= 0 ||
+		self->client->ps.powerups[PW_DISINT_4] > level.time ||
+		level.time < self->client->repulseNextTime )
+	{
+		return qfalse;
+	}
+	if ( !g_useWhileThrowing.integer && self->client->ps.saberInFlight )
+	{
+		return qfalse;
+	}
+	return WP_ForcePowerUsable( self, FP_REPULSE );
+}
+
+//charge: 0..1
+static void ForceRepulse( gentity_t *self, float charge )
+{
+	int			entityList[MAX_GENTITIES];
+	int			numListedEntities, e, i;
+	int			powerLevel = self->client->ps.fd.forcePowerLevel[FP_REPULSE];
+	int			cost;
+	float		radius;
+	qboolean	fullCharge;
+	vec3_t		center, mins, maxs, v, size, entOrg, dir;
+	trace_t		tr;
+	gentity_t	*ent, *te;
+
+	if ( powerLevel <= FORCE_LEVEL_0 || powerLevel > FORCE_LEVEL_3 || !ForceRepulseAllowed( self ) )
+	{
+		return;
+	}
+	charge = Com_Clamp( 0.0f, 1.0f, charge );
+	fullCharge = (charge >= 1.0f) ? qtrue : qfalse;
+
+	BG_ClearRocketLock( &self->client->ps );
+
+	cost = Q_max( 1, (int)(forcePowerNeeded[powerLevel][FP_REPULSE] * (0.5f + 0.5f*charge)) );
+	WP_ForcePowerStart( self, FP_REPULSE, cost );
+	self->client->repulseNextTime = level.time + Q_max( 0, g_repulseCooldown.integer );
+
+	G_Sound( self, CHAN_BODY, G_SoundIndex( "sound/weapons/force/push.wav" ) );
+	self->client->ps.forceHandExtend = HANDEXTEND_FORCEPUSH;
+	self->client->ps.forceHandExtendTime = level.time + 700; //the arms opening out take 600ms
+
+	radius = Q_max( 64.0f, g_repulseRadius.value ) * repulseLevelScale[powerLevel] * (0.5f + 0.5f*charge);
+	VectorCopy( self->client->ps.origin, center );
+
+	te = G_TempEntity( center, EV_FORCE_REPULSE );
+	te->s.otherEntityNum = self->s.number;
+	te->s.eventParm = Com_Clampi( 1, 255, (int)(radius/4) );
+	te->s.generic1 = (int)(charge*100);
+
+	for ( i = 0; i < 3; i++ )
+	{
+		mins[i] = center[i] - radius;
+		maxs[i] = center[i] + radius;
+	}
+	numListedEntities = trap->EntitiesInBox( mins, maxs, entityList, MAX_GENTITIES );
+
+	for ( e = 0; e < numListedEntities; e++ )
+	{
+		float		dist, distFrac, shove, lift;
+		int			modLevel, otherPushPower;
+		qboolean	resisted = qfalse;
+
+		ent = &g_entities[entityList[e]];
+		if ( ent == self || !ent->inuse )
+		{
+			continue;
+		}
+
+		// find the distance from the edge of the bounding box
+		for ( i = 0; i < 3; i++ )
+		{
+			if ( center[i] < ent->r.absmin[i] )
+				v[i] = ent->r.absmin[i] - center[i];
+			else if ( center[i] > ent->r.absmax[i] )
+				v[i] = center[i] - ent->r.absmax[i];
+			else
+				v[i] = 0;
+		}
+		dist = VectorLength( v );
+		if ( dist >= radius )
+		{
+			continue;
+		}
+		VectorSubtract( ent->r.absmax, ent->r.absmin, size );
+		VectorMA( ent->r.absmin, 0.5f, size, entOrg );
+
+		if ( ent->s.eType == ET_MISSILE )
+		{ //blaster bolts go back
+			if ( ent->s.pos.trType != TR_STATIONARY && ent->s.pos.trType != TR_INTERPOLATE &&
+				ent->r.ownerNum != self->s.number && !(ent->s.eFlags & EF_MISSILE_STICK) )
+			{
+				VectorSubtract( entOrg, center, dir );
+				VectorNormalize( dir );
+				G_ReflectMissile( self, ent, dir );
+			}
+			continue;
+		}
+		if ( !ent->client || ent->health <= 0 || (ent->client->ps.eFlags & EF_DEAD) ||
+			ent->client->sess.sessionTeam == TEAM_SPECTATOR || ent->client->tempSpectate >= level.time )
+		{
+			continue;
+		}
+		if ( OnSameTeam( self, ent ) || !ForcePowerUsableOn( self, ent, FP_REPULSE ) )
+		{
+			continue;
+		}
+		if ( ent->client->NPC_class == CLASS_GALAKMECH ||
+			ent->client->NPC_class == CLASS_ATST ||
+			ent->client->NPC_class == CLASS_RANCOR )
+		{ //too big to throw
+			continue;
+		}
+		if ( !trap->InPVS( entOrg, center ) )
+		{
+			continue;
+		}
+		//only walls stop it
+		trap->Trace( &tr, center, vec3_origin, vec3_origin, entOrg, self->s.number, MASK_SOLID, qfalse, 0, 0 );
+		if ( tr.fraction < 1.0f && tr.entityNum != ent->s.number )
+		{
+			vec3_t eyePoint;
+
+			VectorCopy( center, eyePoint );
+			eyePoint[2] += self->client->ps.viewheight;
+			trap->Trace( &tr, eyePoint, vec3_origin, vec3_origin, entOrg, self->s.number, MASK_SOLID, qfalse, 0, 0 );
+			if ( tr.fraction < 1.0f && tr.entityNum != ent->s.number )
+			{
+				continue;
+			}
+		}
+
+		distFrac = dist / radius;
+		VectorSubtract( entOrg, center, dir );
+		dir[2] = Q_max( dir[2], 0.0f );
+		if ( VectorNormalize( dir ) < 1.0f )
+		{ //right on top of us
+			AngleVectors( ent->client->ps.viewangles, dir, NULL, NULL );
+			VectorScale( dir, -1.0f, dir );
+		}
+
+		//absorb takes levels off, a push as strong as ours resists anything short of a full charge
+		modLevel = WP_AbsorbConversion( ent, ent->client->ps.fd.forcePowerLevel[FP_ABSORB], self, FP_REPULSE, powerLevel, cost );
+		if ( modLevel == -1 )
+		{
+			modLevel = powerLevel;
+		}
+		else if ( modLevel < powerLevel )
+		{
+			resisted = qtrue;
+		}
+		otherPushPower = ent->client->ps.fd.forcePowerLevel[FP_PUSH];
+		if ( ent->client->pers.cmd.forwardmove || ent->client->pers.cmd.rightmove )
+		{
+			otherPushPower--;
+		}
+		if ( !fullCharge && otherPushPower > 0 && otherPushPower >= modLevel && CanCounterThrow( ent, self, qfalse ) )
+		{
+			resisted = qtrue;
+			G_Sound( ent, CHAN_BODY, G_SoundIndex( "sound/weapons/force/push.wav" ) );
+			ent->client->ps.forceHandExtend = HANDEXTEND_FORCEPUSH;
+			ent->client->ps.forceHandExtendTime = level.time + 1000;
+			ent->client->ps.powerups[PW_DISINT_4] = ent->client->ps.forceHandExtendTime + 200;
+			ent->client->ps.powerups[PW_PULL] = 0;
+		}
+
+		ent->client->ps.otherKiller = self->s.number;
+		ent->client->ps.otherKillerTime = level.time + 5000;
+		ent->client->ps.otherKillerDebounceTime = level.time + 100;
+
+		shove = Q_max( 0.0f, g_repulseShove.value ) * repulseLevelScale[powerLevel] * charge * (1.0f - 0.5f*distFrac);
+		lift = Q_max( 0.0f, g_repulseLift.value ) * charge;
+		if ( resisted )
+		{
+			shove *= 0.3f;
+			lift = 0.0f;
+		}
+		ent->client->ps.velocity[0] = dir[0]*shove;
+		ent->client->ps.velocity[1] = dir[1]*shove;
+		ent->client->ps.velocity[2] = Q_max( dir[2]*shove, lift );
+		ent->client->pushEffectTime = level.time + 600; //fullbody push effect
+
+		if ( fullCharge && !resisted &&
+			ent->client->ps.forceHandExtend != HANDEXTEND_KNOCKDOWN &&
+			BG_KnockDownable( &ent->client->ps ) )
+		{
+			ent->client->ps.forceHandExtend = HANDEXTEND_KNOCKDOWN;
+			ent->client->ps.forceHandExtendTime = level.time + 700;
+			ent->client->ps.forceDodgeAnim = 0;
+			ent->client->ps.quickerGetup = qtrue;
+			ent->client->pushChargeGetupTime = -1;
+		}
+
+		//escape a force grip if we're in one
+		if ( !resisted && self->client->ps.fd.forceGripBeingGripped > level.time &&
+			ent->client->ps.fd.forceGripEntityNum == self->s.number &&
+			modLevel >= ent->client->ps.fd.forcePowerLevel[FP_GRIP] )
+		{
+			WP_ForcePowerStop( ent, FP_GRIP );
+			self->client->ps.fd.forceGripBeingGripped = 0;
+			ent->client->ps.fd.forceGripUseTime = level.time + 1000;
+		}
+	}
+
+	self->client->dangerTime = level.time;
+	self->client->ps.eFlags &= ~EF_INVULNERABLE;
+	self->client->invulnerableTimer = 0;
+}
+
+static void ForceRepulseChargeStart( gentity_t *self, qboolean fromCmd )
+{
+	if ( !ForceRepulseAllowed( self ) )
+	{
+		return;
+	}
+
+	self->client->repulseChargeStart = level.time;
+	self->client->repulseChargeFromCmd = fromCmd;
+	self->client->ps.forceHandExtend = HANDEXTEND_FORCEREPULSE_CHARGE;
+	self->client->ps.forceHandExtendTime = level.time + 1000;
+}
+
+static void ForceRepulseChargeStop( gentity_t *self )
+{
+	self->client->repulseChargeStart = 0;
+	if ( self->client->ps.forceHandExtend == HANDEXTEND_FORCEREPULSE_CHARGE )
+	{
+		self->client->ps.forceHandExtend = HANDEXTEND_NONE;
+		self->client->ps.forceHandExtendTime = 0;
+	}
+}
+
+void ForceRepulseChargeCommand( gentity_t *self, qboolean down )
+{
+	if ( !down )
+	{
+		self->client->repulseChargeCmdHeld = qfalse;
+		return;
+	}
+
+	if ( self->client->repulseChargeCmdHeld )
+	{ //key repeat
+		return;
+	}
+	self->client->repulseChargeCmdHeld = qtrue;
+
+	if ( level.intermissiontime ||
+		self->health <= 0 ||
+		self->client->sess.sessionTeam == TEAM_SPECTATOR ||
+		self->client->tempSpectate >= level.time )
+	{
+		return;
+	}
+
+	if ( !self->client->repulseChargeStart )
+	{
+		ForceRepulseChargeStart( self, qtrue );
+	}
+}
+
+static void ForceRepulseChargeUpdate( gentity_t *self, usercmd_t *ucmd )
+{
+	float charge;
+
+	if ( !g_repulse.integer || self->health <= 0 ||
+		self->client->ps.forceHandExtend != HANDEXTEND_FORCEREPULSE_CHARGE )
+	{ //charge lost, also when something else took over the hands (like a knockdown)
+		ForceRepulseChargeStop( self );
+		return;
+	}
+
+	if ( self->client->ps.fd.forceGripBeingGripped > level.time )
+	{ //gripped: let it go now, so it can still break the grip
+	}
+	else if ( self->client->repulseChargeFromCmd )
+	{
+		if ( self->client->repulseChargeCmdHeld )
+		{ //still charging
+			self->client->ps.forceHandExtendTime = level.time + 1000;
+			return;
+		}
+	}
+	else
+	{
+		if ( self->client->ps.fd.forcePowerSelected != FP_REPULSE )
+		{
+			ForceRepulseChargeStop( self );
+			return;
+		}
+		if ( ucmd->buttons & BUTTON_FORCEPOWER )
+		{ //still charging
+			self->client->ps.forceHandExtendTime = level.time + 1000;
+			return;
+		}
+	}
+
+	charge = 1.0f;
+	if ( g_repulseChargeTime.integer > 0 )
+	{
+		charge = (float)(level.time - self->client->repulseChargeStart) / g_repulseChargeTime.integer;
+	}
+	ForceRepulseChargeStop( self );
+	ForceRepulse( self, charge );
+}
+
 void WP_ForcePowerStop( gentity_t *self, forcePowers_t forcePower )
 {
 	int wasActive = self->client->ps.fd.forcePowersActive;
@@ -4652,6 +4989,18 @@ int WP_DoSpecificPower( gentity_t *self, usercmd_t *ucmd, forcePowers_t forcepow
 			break;
 		}
 		ForceThrow(self, qtrue);
+		self->client->ps.fd.forceButtonNeedRelease = 1;
+		break;
+	case FP_REPULSE:
+		powerSucceeded = 0; //always 0 for nonhold powers
+		if (self->client->ps.fd.forceButtonNeedRelease && !(self->r.svFlags & SVF_BOT))
+		{ //need to release before we can use nonhold powers again
+			break;
+		}
+		if (!self->client->repulseChargeStart)
+		{
+			ForceRepulseChargeStart(self, qfalse);
+		}
 		self->client->ps.fd.forceButtonNeedRelease = 1;
 		break;
 	case FP_TELEPATHY:
@@ -5615,6 +5964,11 @@ void WP_ForcePowersUpdate( gentity_t *self, usercmd_t *ucmd )
 	if ( self->client->pushChargeStart )
 	{
 		ForcePushChargeUpdate( self, ucmd );
+	}
+
+	if ( self->client->repulseChargeStart )
+	{
+		ForceRepulseChargeUpdate( self, ucmd );
 	}
 
 	if ( (ucmd->buttons & BUTTON_FORCEPOWER) &&

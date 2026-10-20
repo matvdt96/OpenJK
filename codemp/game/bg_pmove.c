@@ -106,7 +106,8 @@ int forcePowerNeeded[NUM_FORCE_POWER_LEVELS][NUM_FORCE_POWERS] =
 		999,//FP_SEE,//duration
 		999,//FP_SABER_OFFENSE,
 		999,//FP_SABER_DEFENSE,
-		999//FP_SABERTHROW,
+		999,//FP_SABERTHROW,
+		999//FP_REPULSE,
 		//NUM_FORCE_POWERS
 	},
 	{
@@ -127,7 +128,8 @@ int forcePowerNeeded[NUM_FORCE_POWER_LEVELS][NUM_FORCE_POWERS] =
 		20,//FP_SEE,//duration
 		0,//FP_SABER_OFFENSE,
 		2,//FP_SABER_DEFENSE,
-		20//FP_SABERTHROW,
+		20,//FP_SABERTHROW,
+		40//FP_REPULSE,
 		//NUM_FORCE_POWERS
 	},
 	{
@@ -148,7 +150,8 @@ int forcePowerNeeded[NUM_FORCE_POWER_LEVELS][NUM_FORCE_POWERS] =
 		20,//FP_SEE,//duration
 		0,//FP_SABER_OFFENSE,
 		1,//FP_SABER_DEFENSE,
-		20//FP_SABERTHROW,
+		20,//FP_SABERTHROW,
+		50//FP_REPULSE,
 		//NUM_FORCE_POWERS
 	},
 	{
@@ -169,7 +172,8 @@ int forcePowerNeeded[NUM_FORCE_POWER_LEVELS][NUM_FORCE_POWERS] =
 		20,//FP_SEE,//duration
 		0,//FP_SABER_OFFENSE,
 		0,//FP_SABER_DEFENSE,
-		20//FP_SABERTHROW,
+		20,//FP_SABERTHROW,
+		60//FP_REPULSE,
 		//NUM_FORCE_POWERS
 	}
 };
@@ -7017,7 +7021,11 @@ static void PM_Weapon( void )
 		switch(pm->ps->forceHandExtend)
 		{
 		case HANDEXTEND_FORCEPUSH:
-			if ( pm->ps->torsoAnim == BOTH_FORCEPUSH_CHARGE || pm->ps->torsoAnim == BOTH_FORCEPUSH_RELEASE )
+			if ( pm->ps->torsoAnim == BOTH_FORCEREPULSE_CHARGE || pm->ps->torsoAnim == BOTH_FORCEREPULSE_RELEASE )
+			{//released a repulse: the arms open out
+				desiredAnim = BOTH_FORCEREPULSE_RELEASE;
+			}
+			else if ( pm->ps->torsoAnim == BOTH_FORCEPUSH_CHARGE || pm->ps->torsoAnim == BOTH_FORCEPUSH_RELEASE )
 			{//released a charge: push from the charging pose
 				desiredAnim = BOTH_FORCEPUSH_RELEASE;
 			}
@@ -7028,6 +7036,9 @@ static void PM_Weapon( void )
 			break;
 		case HANDEXTEND_FORCEPUSH_CHARGE:
 			desiredAnim = BOTH_FORCEPUSH_CHARGE;
+			break;
+		case HANDEXTEND_FORCEREPULSE_CHARGE:
+			desiredAnim = BOTH_FORCEREPULSE_CHARGE;
 			break;
 		case HANDEXTEND_FORCEPULL:
 			desiredAnim = BOTH_FORCEPULL;

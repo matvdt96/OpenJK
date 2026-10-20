@@ -109,8 +109,18 @@ char *showPowersName[] =
 	"SABER_OFFENSE2",//FP_SABER_OFFENSE
 	"SABER_DEFENSE2",//FP_SABER_DEFENSE
 	"SABER_THROW2",//FP_SABERTHROW
+	"REPULSE2",//FP_REPULSE
 	NULL
 };
+
+const char *CG_ForcePowerName( int power )
+{
+	if ( power == FP_REPULSE )
+	{//not in the string table
+		return "Repulse";
+	}
+	return CG_GetStringEdString( "SP_INGAME", showPowersName[power] );
+}
 
 //Called from UI shared code. For now we'll just redirect to the normal anim load function.
 
@@ -1668,7 +1678,7 @@ void CG_DrawForceSelect( void )
 
 	if ( showPowersName[cg.forceSelect] )
 	{
-		CG_DrawProportionalString(320, y + 30 + yOffset, CG_GetStringEdString("SP_INGAME", showPowersName[cg.forceSelect]), UI_CENTER | UI_SMALLFONT, colorTable[CT_ICON_BLUE]);
+		CG_DrawProportionalString(320, y + 30 + yOffset, CG_ForcePowerName(cg.forceSelect), UI_CENTER | UI_SMALLFONT, colorTable[CT_ICON_BLUE]);
 	}
 }
 
@@ -7943,39 +7953,51 @@ static void CG_Draw2DScreenTints( void )
 	}
 }
 
-//charge bar of a held force push, under the crosshair; the charge starts with the snapshot that first has the pose
+//charge bar of a held force push or repulse, under the crosshair; the charge starts with the snapshot that first has the pose
 static void CG_DrawForcePushCharge( void )
 {
 	static int	chargeStart;
+	static int	chargeHandExtend;
 	const float	w = 80.0f, h = 6.0f;
 	const float	x = (SCREEN_WIDTH-w)/2, y = SCREEN_HEIGHT/2+28;
 	vec4_t		fillColor = { 0.4f, 0.7f, 1.0f, 0.8f };
 	vec4_t		backColor = { 0.0f, 0.0f, 0.0f, 0.5f };
 	vec4_t		edgeColor = { 0.0f, 0.0f, 0.0f, 1.0f };
-	int			held, threshold;
+	int			held, threshold, chargeTime;
 	float		frac;
 
-	if ( cg.snap->ps.forceHandExtend != HANDEXTEND_FORCEPUSH_CHARGE )
+	if ( cg.snap->ps.forceHandExtend != HANDEXTEND_FORCEPUSH_CHARGE &&
+		cg.snap->ps.forceHandExtend != HANDEXTEND_FORCEREPULSE_CHARGE )
 	{
 		chargeStart = 0;
 		return;
 	}
-	if ( !chargeStart || chargeStart > cg.time )
+	if ( !chargeStart || chargeStart > cg.time || chargeHandExtend != cg.snap->ps.forceHandExtend )
 	{
 		chargeStart = cg.snap->serverTime;
+		chargeHandExtend = cg.snap->ps.forceHandExtend;
 	}
 
 	held = cg.time - chargeStart;
-	threshold = g_pushChargeThreshold.integer;
+	if ( chargeHandExtend == HANDEXTEND_FORCEREPULSE_CHARGE )
+	{//charges from nothing
+		threshold = 0;
+		chargeTime = g_repulseChargeTime.integer;
+	}
+	else
+	{
+		threshold = g_pushChargeThreshold.integer;
+		chargeTime = g_pushChargeTime.integer;
+	}
 	if ( held < threshold )
 	{
 		return;
 	}
 
 	frac = 1.0f;
-	if ( g_pushChargeTime.integer > 0 )
+	if ( chargeTime > 0 )
 	{
-		frac = Com_Clamp( 0.0f, 1.0f, (float)(held - threshold) / g_pushChargeTime.integer );
+		frac = Com_Clamp( 0.0f, 1.0f, (float)(held - threshold) / chargeTime );
 	}
 	if ( frac >= 1.0f )
 	{//full: white

@@ -193,7 +193,8 @@ int bgForcePowerCost[NUM_FORCE_POWERS][NUM_FORCE_POWER_LEVELS] = //0 == neutral
 	{	0,	2,	5,	8	},	// Sight		//FP_SEE,//duration
 	{	0,	1,	5,	8	},	// Saber Attack	//FP_SABER_OFFENSE,
 	{	0,	1,	5,	8	},	// Saber Defend	//FP_SABER_DEFENSE,
-	{	0,	4,	6,	8	}	// Saber Throw	//FP_SABERTHROW,
+	{	0,	4,	6,	8	},	// Saber Throw	//FP_SABERTHROW,
+	{	0,	2,	4,	6	}	// Repulse		//FP_REPULSE,
 	//NUM_FORCE_POWERS
 };
 
@@ -208,6 +209,7 @@ int forcePowerSorted[NUM_FORCE_POWERS] =
 	FP_SPEED,
 	FP_PUSH,
 	FP_PULL,
+	FP_REPULSE,
 	FP_SEE,
 	FP_LIGHTNING,
 	FP_DRAIN,
@@ -238,7 +240,8 @@ int forcePowerDarkLight[NUM_FORCE_POWERS] = //0 == neutral
 	0,//FP_SEE,//duration
 	0,//FP_SABER_OFFENSE,
 	0,//FP_SABER_DEFENSE,
-	0//FP_SABERTHROW,
+	0,//FP_SABERTHROW,
+	FORCE_LIGHTSIDE//FP_REPULSE,
 		//NUM_FORCE_POWERS
 };
 
@@ -1776,6 +1779,7 @@ qboolean BG_CanUseFPNow(int gametype, playerState_t *ps, int time, forcePowers_t
 		{
 		case FP_PUSH:
 		case FP_PULL:
+		case FP_REPULSE:
 		case FP_GRIP:
 		case FP_LIGHTNING:
 		case FP_DRAIN:

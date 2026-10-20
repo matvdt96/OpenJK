@@ -676,7 +676,8 @@ char *forceHolocronModels[NUM_FORCE_POWERS] = {
 	"models/map_objects/mp/force_sight.md3",	//FP_SEE,
 	"models/map_objects/mp/saber_attack.md3",	//FP_SABER_OFFENSE,
 	"models/map_objects/mp/saber_defend.md3",	//FP_SABER_DEFENSE,
-	"models/map_objects/mp/saber_throw.md3"		//FP_SABERTHROW
+	"models/map_objects/mp/saber_throw.md3",	//FP_SABERTHROW
+	"models/map_objects/mp/force_push.md3"		//FP_REPULSE
 };
 
 void CG_Disintegration(centity_t *cent, refEntity_t *ent)

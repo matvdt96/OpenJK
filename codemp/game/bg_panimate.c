@@ -2331,6 +2331,38 @@ static void BG_MakeForcePushChargeAnims( animation_t *animset )
 	animset[BOTH_FORCEPUSH_CHARGE].loopFrames = -1;
 }
 
+//BOTH_FORCEREPULSE_CHARGE and BOTH_FORCEREPULSE_RELEASE are made the same way: the charge is
+//BOTH_FORCE_ABSORB_START (arms gathered to the chest) stretched over the charge time, the release
+//is BOTH_FORCE_ABSORB_END (arms opening out). Sets without them use the charged push ones.
+static int bgForceRepulseChargeTime = 1000;
+
+static void BG_MakeForceRepulseChargeAnims( animation_t *animset )
+{
+	const animation_t *absorbStart = &animset[BOTH_FORCE_ABSORB_START];
+	const animation_t *absorbEnd = &animset[BOTH_FORCE_ABSORB_END];
+
+	if ( absorbStart->numFrames > 1 && absorbStart->frameLerp > 0 )
+	{
+		animset[BOTH_FORCEREPULSE_CHARGE] = *absorbStart;
+		animset[BOTH_FORCEREPULSE_CHARGE].frameLerp = Q_max( 1, bgForceRepulseChargeTime/(absorbStart->numFrames-1) );
+		animset[BOTH_FORCEREPULSE_CHARGE].loopFrames = -1;
+	}
+	else
+	{
+		animset[BOTH_FORCEREPULSE_CHARGE] = animset[BOTH_FORCEPUSH_CHARGE];
+	}
+
+	if ( absorbEnd->numFrames > 1 && absorbEnd->frameLerp > 0 )
+	{
+		animset[BOTH_FORCEREPULSE_RELEASE] = *absorbEnd;
+		animset[BOTH_FORCEREPULSE_RELEASE].loopFrames = -1;
+	}
+	else
+	{
+		animset[BOTH_FORCEREPULSE_RELEASE] = animset[BOTH_FORCEPUSH_RELEASE];
+	}
+}
+
 //ms to fully charge, every frame in game and cgame; remakes the loaded anims when it changes
 void BG_SetForcePushChargeAnimTime( int chargeTime )
 {
@@ -2346,6 +2378,26 @@ void BG_SetForcePushChargeAnimTime( int chargeTime )
 		if ( bgAllAnims[i].anims )
 		{
 			BG_MakeForcePushChargeAnims( bgAllAnims[i].anims );
+			BG_MakeForceRepulseChargeAnims( bgAllAnims[i].anims );
+		}
+	}
+}
+
+//ms to fully charge a repulse, every frame in game and cgame; remakes the loaded anims when it changes
+void BG_SetForceRepulseChargeAnimTime( int chargeTime )
+{
+	int i;
+
+	if ( chargeTime == bgForceRepulseChargeTime )
+	{
+		return;
+	}
+	bgForceRepulseChargeTime = chargeTime;
+	for ( i = 0; i < bgNumAllAnims; i++ )
+	{
+		if ( bgAllAnims[i].anims )
+		{
+			BG_MakeForceRepulseChargeAnims( bgAllAnims[i].anims );
 		}
 	}
 }
@@ -2544,6 +2596,7 @@ int BG_ParseAnimationFile(const char *filename, animation_t *animset, qboolean i
 		}
 	}
 	BG_MakeForcePushChargeAnims( animset );
+	BG_MakeForceRepulseChargeAnims( animset );
 /*
 #ifdef _DEBUG
 	//Check the array, and print the ones that have nothing in them.

@@ -442,6 +442,7 @@ typedef struct centity_s {
 	float			pushChargeFrac;			// 0..1 while charging
 	float			pushChargeReleased;		// charge of the last released push, scales its wave
 	qboolean		pushChargeSound;		// the charge-up sound is playing
+	qboolean		pushChargeRepulse;		// the charge is a repulse, not a push
 
 	cgLoopSound_t	loopingSound[MAX_CG_LOOPSOUNDS];
 	int				numLoopingSounds;
@@ -1761,6 +1762,8 @@ void CG_AddLagometerSnapshotInfo( snapshot_t *snap );
 void CG_CenterPrint( const char *str, int y, int charWidth );
 void CG_DrawHead( float x, float y, float w, float h, int clientNum, vec3_t headAngles );
 void CG_DrawActive( stereoFrame_t stereoView );
+const char *CG_ForcePowerName( int power );
+void CG_ForceRepulseDust( centity_t *cent, float charge, float radius );
 void CG_DrawFlagModel( float x, float y, float w, float h, int team, qboolean force2D );
 void CG_DrawTeamBackground( int x, int y, int w, int h, float alpha, int team );
 void CG_OwnerDraw(float x, float y, float w, float h, float text_x, float text_y, int ownerDraw, int ownerDrawFlags, int align, float special, float scale, vec4_t color, qhandle_t shader, int textStyle,int font);

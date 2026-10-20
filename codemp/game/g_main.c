@@ -2933,6 +2933,7 @@ void G_RunFrame( int levelTime ) {
 #endif
 
 	BG_SetForcePushChargeAnimTime( g_pushChargeThreshold.integer + Q_max( 0, g_pushChargeTime.integer ) );
+	BG_SetForceRepulseChargeAnimTime( Q_max( 0, g_repulseChargeTime.integer ) );
 
 	if (level.gametype == GT_SIEGE &&
 		g_siegeRespawn.integer &&

@@ -4834,14 +4834,16 @@ static void CG_PlayerSplash( centity_t *cent ) {
 #define REFRACT_EFFECT_DURATION		500
 
 //dust swept along the ground by a charged force push: a fan of puffs opening out in front of the pusher
+//(halfArc 40), or a whole ring of them for a repulse (halfArc 180)
 #define PUSH_DUST_MIN_RANGE		128
 #define PUSH_DUST_CHARGE_RANGE	384
 #define PUSH_DUST_HALF_ARC		40
+#define REPULSE_DUST_HALF_ARC	180
 #define PUSH_DUST_ARC_STEP		4
 #define PUSH_DUST_PUFFS			2
 #define PUSH_DUST_LIFE			700
 
-static void CG_StartForcePushDust( centity_t *cent, float charge )
+static void CG_StartForcePushDust( centity_t *cent, float charge, int halfArc, float range )
 {
 	static char			fxName[MAX_QPATH];
 	static int			fxHandle;
@@ -4849,7 +4851,6 @@ static void CG_StartForcePushDust( centity_t *cent, float charge )
 	addspriteArgStruct_t	s;
 	vec3_t		ground, ang, dir, end;
 	trace_t		tr;
-	float		range = PUSH_DUST_MIN_RANGE + PUSH_DUST_CHARGE_RANGE*charge;
 	int			a, i;
 
 	if ( Q_stricmp( fxName, cg_pushChargeDustFx.string ) )
@@ -4881,10 +4882,14 @@ static void CG_StartForcePushDust( centity_t *cent, float charge )
 	}
 
 	ground[2] += 12;
-	for ( a = -PUSH_DUST_HALF_ARC; a <= PUSH_DUST_HALF_ARC; a += PUSH_DUST_ARC_STEP )
+	for ( a = -halfArc; a <= halfArc; a += PUSH_DUST_ARC_STEP )
 	{
 		float dist;
 
+		if ( a == halfArc && halfArc >= 180 )
+		{//a full ring: -180 is already there
+			break;
+		}
 		VectorSet( ang, 0, cent->lerpAngles[YAW] + a, 0 );
 		AngleVectors( ang, dir, NULL, NULL );
 		VectorMA( ground, range, dir, end );
@@ -4923,25 +4928,35 @@ static void CG_StartForcePushDust( centity_t *cent, float charge )
 	}
 }
 
-//charged force push: 0..1 while cent holds the charging pose (0 during a short press), else -1;
-//everyone is timed from when the pose showed up
+//a repulse went off (EV_FORCE_REPULSE): the dust ring reaches as far as the wave
+void CG_ForceRepulseDust( centity_t *cent, float charge, float radius )
+{
+	if ( cg_pushChargeFx.integer && charge > 0.0f )
+	{
+		CG_StartForcePushDust( cent, charge, REPULSE_DUST_HALF_ARC, radius );
+	}
+}
+
+//charged force push or repulse: 0..1 while cent holds the charging pose (0 during a short push press),
+//else -1; everyone is timed from when the pose showed up
 static float CG_ForcePushChargeFrac( centity_t *cent )
 {
-	int held, threshold;
+	int			held, threshold, chargeTime;
+	qboolean	repulse = (cent->currentState.torsoAnim == BOTH_FORCEREPULSE_CHARGE) ? qtrue : qfalse;
 
 	if ( !cg_pushChargeFx.integer
-		|| cent->currentState.torsoAnim != BOTH_FORCEPUSH_CHARGE
+		|| (cent->currentState.torsoAnim != BOTH_FORCEPUSH_CHARGE && !repulse)
 		|| (cent->currentState.eFlags & EF_DEAD) )
 	{
 		if ( cent->pushChargeStartTime )
 		{//charge over: if it went off, its wave and dust grow with it
 			cent->pushChargeReleased = 0.0f;
-			if ( cg_pushChargeFx.integer && cent->currentState.torsoAnim == BOTH_FORCEPUSH_RELEASE )
+			if ( cg_pushChargeFx.integer && !cent->pushChargeRepulse && cent->currentState.torsoAnim == BOTH_FORCEPUSH_RELEASE )
 			{
 				cent->pushChargeReleased = cent->pushChargeFrac;
 				if ( cent->pushChargeFrac > 0.0f )
 				{
-					CG_StartForcePushDust( cent, cent->pushChargeFrac );
+					CG_StartForcePushDust( cent, cent->pushChargeFrac, PUSH_DUST_HALF_ARC, PUSH_DUST_MIN_RANGE + PUSH_DUST_CHARGE_RANGE*cent->pushChargeFrac );
 				}
 			}
 			if ( cent->pushChargeSound )
@@ -4955,12 +4970,14 @@ static float CG_ForcePushChargeFrac( centity_t *cent )
 		return -1.0f;
 	}
 
-	if ( !cent->pushChargeStartTime )
+	if ( !cent->pushChargeStartTime || cent->pushChargeRepulse != repulse )
 	{
 		cent->pushChargeStartTime = cg.time;
+		cent->pushChargeRepulse = repulse;
 	}
 	held = cg.time - cent->pushChargeStartTime;
-	threshold = g_pushChargeThreshold.integer;
+	threshold = repulse ? 0 : g_pushChargeThreshold.integer;
+	chargeTime = repulse ? g_repulseChargeTime.integer : g_pushChargeTime.integer;
 	if ( held < threshold )
 	{
 		cent->pushChargeFrac = 0.0f;
@@ -4973,9 +4990,9 @@ static float CG_ForcePushChargeFrac( centity_t *cent )
 		cent->pushChargeSound = qtrue;
 	}
 	cent->pushChargeFrac = 1.0f;
-	if ( g_pushChargeTime.integer > 0 )
+	if ( chargeTime > 0 )
 	{
-		cent->pushChargeFrac = Com_Clamp( 0.0f, 1.0f, (float)(held - threshold) / g_pushChargeTime.integer );
+		cent->pushChargeFrac = Com_Clamp( 0.0f, 1.0f, (float)(held - threshold) / chargeTime );
 	}
 	return cent->pushChargeFrac;
 }
@@ -9932,6 +9949,15 @@ void CG_Player( centity_t *cent ) {
 			efOrg[0] = lHandMatrix.matrix[0][3];
 			efOrg[1] = lHandMatrix.matrix[1][3];
 			efOrg[2] = lHandMatrix.matrix[2][3];
+			if ( cent->pushChargeRepulse )
+			{//gathered between the hands
+				mdxaBone_t rHandMatrix;
+
+				trap->G2API_GetBoltMatrix(cent->ghoul2, 0, ci->bolt_rhand, &rHandMatrix, cent->turAngles, cent->lerpOrigin, cg.time, cgs.gameModels, cent->modelScale);
+				efOrg[0] = (efOrg[0] + rHandMatrix.matrix[0][3]) * 0.5f;
+				efOrg[1] = (efOrg[1] + rHandMatrix.matrix[1][3]) * 0.5f;
+				efOrg[2] = (efOrg[2] + rHandMatrix.matrix[2][3]) * 0.5f;
+			}
 			CG_ForcePushChargeEffect( cent, efOrg, chargeFrac );
 		}
 	}

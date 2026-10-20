@@ -50,8 +50,8 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 #define	STEPSIZE		18
 
-#define DEFAULT_FORCEPOWERS	"5-1-000000000000000000"
-#define DEFAULT_FORCEPOWERS_LEN (22) // numPowers + rank + side + separators
+#define DEFAULT_FORCEPOWERS	"5-1-0000000000000000000"
+#define DEFAULT_FORCEPOWERS_LEN (23) // numPowers + rank + side + separators
 //"rank-side-heal.lev.speed.push.pull.tele.grip.lightning.rage.protect.absorb.teamheal.teamforce.drain.see"
 
 #define	DEFAULT_GRAVITY		800
@@ -220,6 +220,7 @@ typedef enum {
 	HANDEXTEND_JEDITAUNT,
 
 	HANDEXTEND_FORCEPUSH_CHARGE,
+	HANDEXTEND_FORCEREPULSE_CHARGE,
 } forceHandAnims_t;
 
 typedef enum
@@ -1049,6 +1050,8 @@ typedef enum {
 
 	EV_SIEGESPEC,
 
+	EV_FORCE_REPULSE,		// otherEntityNum = who, eventParm = radius/4, generic1 = charge*100
+
 	EV_NUM_ENTITY_EVENTS
 } entity_event_t;			// There is a maximum of 256 events (8 bits transmission, 2 high bits for uniqueness)
 
@@ -1759,6 +1762,7 @@ void	BG_InitAnimsets(void);
 void	BG_ClearAnimsets(void);
 int		BG_ParseAnimationFile(const char *filename, animation_t *animSet, qboolean isHumanoid);
 void	BG_SetForcePushChargeAnimTime( int chargeTime );
+void	BG_SetForceRepulseChargeAnimTime( int chargeTime );
 #ifndef _GAME
 int		BG_ParseAnimationEvtFile( const char *as_filename, int animFileIndex, int eventFileIndex );
 #endif
