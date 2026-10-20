@@ -4833,111 +4833,92 @@ static void CG_PlayerSplash( centity_t *cent ) {
 
 #define REFRACT_EFFECT_DURATION		500
 
-//dust thrown up along the ground by a charged force push, ring after ring out from the pusher
-#define MAX_PUSH_DUST_WAVES		8
-#define PUSH_DUST_RING_STEP		64
-#define PUSH_DUST_RING_TIME		35
+//dust swept along the ground by a charged force push: a fan of puffs opening out in front of the pusher
 #define PUSH_DUST_MIN_RANGE		128
 #define PUSH_DUST_CHARGE_RANGE	384
 #define PUSH_DUST_HALF_ARC		40
-
-typedef struct pushDustWave_s {
-	int		startTime;
-	vec3_t	org;
-	float	yaw;
-	float	range;
-	int		rings;
-} pushDustWave_t;
-
-static pushDustWave_t pushDustWaves[MAX_PUSH_DUST_WAVES];
+#define PUSH_DUST_ARC_STEP		4
+#define PUSH_DUST_PUFFS			2
+#define PUSH_DUST_LIFE			700
 
 static void CG_StartForcePushDust( centity_t *cent, float charge )
 {
-	pushDustWave_t *w = &pushDustWaves[0];
-	int i;
-
-	for ( i = 0; i < MAX_PUSH_DUST_WAVES; i++ )
-	{
-		if ( !pushDustWaves[i].startTime )
-		{
-			w = &pushDustWaves[i];
-			break;
-		}
-		if ( pushDustWaves[i].startTime < w->startTime )
-		{
-			w = &pushDustWaves[i];
-		}
-	}
-
-	w->startTime = cg.time;
-	VectorCopy( cent->lerpOrigin, w->org );
-	w->yaw = cent->lerpAngles[YAW];
-	w->range = PUSH_DUST_MIN_RANGE + PUSH_DUST_CHARGE_RANGE*charge;
-	w->rings = 0;
-}
-
-void CG_AddForcePushDust( void )
-{
-	static char	fxName[MAX_QPATH];
-	static int	fxHandle;
-	int			i, j;
+	static char			fxName[MAX_QPATH];
+	static int			fxHandle;
+	static qhandle_t	shader;
+	addspriteArgStruct_t	s;
+	vec3_t		ground, ang, dir, end;
+	trace_t		tr;
+	float		range = PUSH_DUST_MIN_RANGE + PUSH_DUST_CHARGE_RANGE*charge;
+	int			a, i;
 
 	if ( Q_stricmp( fxName, cg_pushChargeDustFx.string ) )
 	{
 		Q_strncpyz( fxName, cg_pushChargeDustFx.string, sizeof( fxName ) );
 		fxHandle = fxName[0] ? trap->FX_RegisterEffect( fxName ) : 0;
 	}
-
-	for ( i = 0; i < MAX_PUSH_DUST_WAVES; i++ )
+	if ( !shader )
 	{
-		pushDustWave_t *w = &pushDustWaves[i];
-		int due;
+		shader = trap->R_RegisterShader( "gfx/effects/alpha_smoke" );
+	}
 
-		if ( !w->startTime )
+	VectorCopy( cent->lerpOrigin, end );
+	end[2] -= 96;
+	CG_Trace( &tr, cent->lerpOrigin, NULL, NULL, end, cent->currentState.number, MASK_SOLID );
+	if ( tr.fraction >= 1.0f || tr.startsolid || tr.allsolid )
+	{//not standing near the ground: nothing to sweep
+		return;
+	}
+	VectorCopy( tr.endpos, ground );
+
+	if ( fxHandle )
+	{
+		trap->FX_PlayEffectID( fxHandle, ground, tr.plane.normal, -1, -1, qfalse );
+	}
+	if ( !cg_pushChargeDustBlow.integer )
+	{
+		return;
+	}
+
+	ground[2] += 12;
+	for ( a = -PUSH_DUST_HALF_ARC; a <= PUSH_DUST_HALF_ARC; a += PUSH_DUST_ARC_STEP )
+	{
+		float dist;
+
+		VectorSet( ang, 0, cent->lerpAngles[YAW] + a, 0 );
+		AngleVectors( ang, dir, NULL, NULL );
+		VectorMA( ground, range, dir, end );
+		CG_Trace( &tr, ground, NULL, NULL, end, cent->currentState.number, MASK_SOLID );
+		dist = range * (tr.startsolid ? 0.0f : tr.fraction);
+		if ( dist < 16 )
 		{
 			continue;
 		}
-		if ( w->startTime > cg.time || !fxHandle )
-		{
-			w->startTime = 0;
-			continue;
-		}
 
-		due = (cg.time - w->startTime) / PUSH_DUST_RING_TIME + 1;
-		while ( w->startTime && w->rings < due )
-		{
-			float dist = (w->rings+1) * PUSH_DUST_RING_STEP;
-			int puffs = Com_Clampi( 1, 5, (int)(dist/96.0f) + 1 );
+		for ( i = 0; i < PUSH_DUST_PUFFS; i++ )
+		{//slows down evenly to stop at dist (or the wall) when it's gone
+			float	life = PUSH_DUST_LIFE * Q_flrand( 0.85f, 1.0f );
+			float	speed = 2000.0f * dist * Q_flrand( 0.8f, 1.0f ) / life;
+			float	yaw = ang[YAW] + Q_flrand( -0.5f, 0.5f ) * PUSH_DUST_ARC_STEP;
+			vec3_t	pdir;
 
-			if ( dist > w->range )
-			{
-				w->startTime = 0;
-				break;
-			}
-
-			for ( j = 0; j < puffs; j++ )
-			{
-				vec3_t	ang, dir, start, end;
-				trace_t	tr;
-
-				VectorSet( ang, 0, w->yaw, 0 );
-				if ( puffs > 1 )
-				{
-					ang[YAW] += -PUSH_DUST_HALF_ARC + (2*PUSH_DUST_HALF_ARC*j)/(float)(puffs-1);
-				}
-				AngleVectors( ang, dir, NULL, NULL );
-				VectorMA( w->org, dist, dir, start );
-				VectorCopy( start, end );
-				start[2] += 32;
-				end[2] -= 96;
-
-				CG_Trace( &tr, start, NULL, NULL, end, ENTITYNUM_NONE, MASK_SOLID );
-				if ( tr.fraction < 1.0f && !tr.startsolid && !tr.allsolid )
-				{
-					trap->FX_PlayEffectID( fxHandle, tr.endpos, tr.plane.normal, -1, -1, qfalse );
-				}
-			}
-			w->rings++;
+			VectorSet( pdir, 0, yaw, 0 );
+			AngleVectors( pdir, pdir, NULL, NULL );
+			VectorMA( ground, Q_flrand( 8.0f, 24.0f ), pdir, s.origin );
+			s.origin[2] += Q_flrand( -4.0f, 4.0f );
+			VectorScale( pdir, speed, s.vel );
+			s.vel[2] = Q_flrand( 10.0f, 40.0f );
+			VectorScale( s.vel, -1000.0f / life, s.accel );
+			s.scale = Q_flrand( 10.0f, 16.0f );
+			s.dscale = (24.0f + 48.0f*dist/range) * Q_flrand( 0.8f, 1.0f );
+			s.sAlpha = Q_flrand( 0.75f, 0.95f );
+			s.eAlpha = 0.0f;
+			s.rotation = Q_flrand( 0.0f, 360.0f );
+			s.bounce = 0.0f;
+			s.life = life;
+			s.shader = shader;
+			s.flags = 0x00000001 | 0x00000100 | 0x08000000; //FX_ALPHA_LINEAR | FX_SIZE_LINEAR | FX_USE_ALPHA
+			trap->FX_AddSprite( &s );
 		}
 	}
 }
