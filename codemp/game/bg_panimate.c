@@ -2334,7 +2334,7 @@ static void BG_MakeForcePushChargeAnims( animation_t *animset )
 //BOTH_FORCEREPULSE_CHARGE and BOTH_FORCEREPULSE_RELEASE are made the same way: the charge is
 //BOTH_FORCE_ABSORB_START (arms gathered to the chest) stretched over the charge time, the release
 //is BOTH_FORCE_ABSORB_END (arms opening out). Sets without them use the charged push ones.
-static int bgForceRepulseChargeTime = 1000;
+static int bgForceRepulseChargeTime = 2000;
 
 static void BG_MakeForceRepulseChargeAnims( animation_t *animset )
 {
