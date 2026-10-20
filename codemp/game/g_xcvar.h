@@ -37,6 +37,8 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 XCVAR_DEF( bg_fighterAltControl,		"0",			NULL,						CVAR_SYSTEMINFO,								qtrue )
 XCVAR_DEF( bg_forceJumpHeightScale,	"2",			NULL,						CVAR_SYSTEMINFO,								qtrue )
 XCVAR_DEF( bg_forceJumpRampTime,		"300",			NULL,						CVAR_SYSTEMINFO,								qtrue )
+XCVAR_DEF( bg_forceJumpReleaseDamp,	"50",			NULL,						CVAR_SYSTEMINFO,								qtrue )
+XCVAR_DEF( bg_forceJumpApexSpeed,		"350",			NULL,						CVAR_SYSTEMINFO,								qtrue )
 XCVAR_DEF( capturelimit,				"8",			NULL,						CVAR_SERVERINFO|CVAR_ARCHIVE|CVAR_NORESTART,	qtrue )
 XCVAR_DEF( com_optvehtrace,				"0",			NULL,						CVAR_NONE,										qtrue )
 XCVAR_DEF( d_altRoutes,					"0",			NULL,						CVAR_CHEAT,										qfalse )

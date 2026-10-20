@@ -36,6 +36,8 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 XCVAR_DEF( bg_fighterAltControl,				"0",					NULL,					CVAR_SYSTEMINFO )
 XCVAR_DEF( bg_forceJumpHeightScale,				"2",					NULL,					CVAR_SYSTEMINFO )
 XCVAR_DEF( bg_forceJumpRampTime,					"300",					NULL,					CVAR_SYSTEMINFO )
+XCVAR_DEF( bg_forceJumpReleaseDamp,				"50",					NULL,					CVAR_SYSTEMINFO )
+XCVAR_DEF( bg_forceJumpApexSpeed,					"350",					NULL,					CVAR_SYSTEMINFO )
 XCVAR_DEF( broadsword,							"0",					NULL,					CVAR_ARCHIVE )
 XCVAR_DEF( cg_animBlend,						"1",					NULL,					CVAR_NONE )
 XCVAR_DEF( cg_animSpeed,						"1",					NULL,					CVAR_CHEAT )

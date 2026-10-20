@@ -1744,6 +1744,8 @@ float forceJumpHeightMax[NUM_FORCE_POWER_LEVELS] =
 
 extern vmCvar_t bg_forceJumpHeightScale;
 extern vmCvar_t bg_forceJumpRampTime;
+extern vmCvar_t bg_forceJumpReleaseDamp;
+extern vmCvar_t bg_forceJumpApexSpeed;
 
 static float PM_ForceJumpHeightScale( void )
 {
@@ -1754,13 +1756,47 @@ static float PM_ForceJumpHeightScale( void )
 	return 1.0f;
 }
 
+static float PM_ForceJumpApexSpeed( int level )
+{
+	const float scale = PM_ForceJumpHeightScale();
+	float speed, maxSpeedSq;
+
+	if ( scale <= 1.0f
+		|| level <= FORCE_LEVEL_0
+		|| level >= NUM_FORCE_POWER_LEVELS
+		|| pm->ps->gravity <= 0 )
+	{
+		return JUMP_VELOCITY;
+	}
+
+	speed = bg_forceJumpApexSpeed.value;
+	if ( speed > JUMP_VELOCITY*2.0f )
+	{
+		speed = JUMP_VELOCITY*2.0f;
+	}
+	maxSpeedSq = JUMP_VELOCITY*JUMP_VELOCITY+pm->ps->gravity*(scale-1.0f)*forceJumpHeight[level];
+	if ( speed*speed > maxSpeedSq )
+	{
+		speed = sqrt( maxSpeedSq );
+	}
+	if ( speed < JUMP_VELOCITY )
+	{
+		speed = JUMP_VELOCITY;
+	}
+	return speed;
+}
+
 static float PM_ForceJumpMaxHeight( int level )
 {
+	float apexSpeed;
+
 	if ( level <= FORCE_LEVEL_0 )
 	{
 		return forceJumpHeight[level];
 	}
-	return forceJumpHeight[level]*PM_ForceJumpHeightScale();
+	apexSpeed = PM_ForceJumpApexSpeed( level );
+	return forceJumpHeight[level]*PM_ForceJumpHeightScale()
+		-(apexSpeed*apexSpeed-JUMP_VELOCITY*JUMP_VELOCITY)/(2.0f*(pm->ps->gravity > 0 ? pm->ps->gravity : 1));
 }
 
 static float PM_ForceJumpBaseVelocity( int level, float curHeight )
@@ -1789,6 +1825,7 @@ static float PM_ForceJumpLiftVelocity( int level, float curHeight )
 	const float startVel = JUMP_VELOCITY+forceJumpStrength[level]/10.0f;
 	const float decay = forceJumpStrength[level]/(10.0f*baseHeight);
 	float apexTime, rampTime, window, lo, hi, t, u;
+	float endCurve, endSpeed, c2, c3, c4;
 	int i;
 
 	if ( extraHeight <= 0.0f )
@@ -1813,13 +1850,27 @@ static float PM_ForceJumpLiftVelocity( int level, float curHeight )
 		return PM_ForceJumpBaseVelocity( level, curHeight );
 	}
 
+	endCurve = (pm->ps->gravity-decay*JUMP_VELOCITY)*window*window;
+	if ( endCurve < 0.0f )
+	{
+		endCurve = 0.0f;
+	}
+	else if ( endCurve > extraHeight*6.0f )
+	{
+		endCurve = extraHeight*6.0f;
+	}
+	endSpeed = (PM_ForceJumpApexSpeed( level )-JUMP_VELOCITY)*window;
+	c2 = extraHeight*6.0f-endSpeed*3.0f-endCurve*0.5f;
+	c3 = endSpeed*5.0f-extraHeight*8.0f+endCurve;
+	c4 = extraHeight*3.0f-endSpeed*2.0f-endCurve*0.5f;
+
 	lo = rampTime;
 	hi = apexTime;
 	for ( i = 0; i < 16; i++ )
 	{
 		t = (lo+hi)*0.5f;
 		u = (t-rampTime)/window;
-		if ( PM_ForceJumpBaseHeightAtTime( startVel, decay, t )+extraHeight*u*u*(3.0f-2.0f*u) < curHeight )
+		if ( PM_ForceJumpBaseHeightAtTime( startVel, decay, t )+u*u*(c2+u*(c3+u*c4)) < curHeight )
 		{
 			lo = t;
 		}
@@ -1831,13 +1882,12 @@ static float PM_ForceJumpLiftVelocity( int level, float curHeight )
 	t = (lo+hi)*0.5f;
 	u = (t-rampTime)/window;
 
-	return startVel*exp(-decay*t)+extraHeight*6.0f*u*(1.0f-u)/window;
+	return startVel*exp(-decay*t)+u*(2.0f*c2+u*(3.0f*c3+u*4.0f*c4))/window;
 }
 
-static void PM_ForceJumpReleaseCut( void )
+static qboolean PM_ForceJumpCanDamp( void )
 {
 	const int level = pm->ps->fd.forcePowerLevel[FP_LEVITATION];
-	float maxVel;
 
 	if ( PM_ForceJumpHeightScale() <= 1.0f
 		|| !(pm->ps->fd.forcePowersActive&(1<<FP_LEVITATION))
@@ -1846,13 +1896,52 @@ static void PM_ForceJumpReleaseCut( void )
 		|| level >= NUM_FORCE_POWER_LEVELS
 		|| BG_InSpecialJump( pm->ps->legsAnim ) )
 	{
+		return qfalse;
+	}
+	return qtrue;
+}
+
+static void PM_ForceJumpReleaseStart( void )
+{
+	if ( PM_ForceJumpCanDamp()
+		&& pm->ps->origin[2]-pm->ps->fd.forceJumpZStart < PM_ForceJumpMaxHeight( pm->ps->fd.forcePowerLevel[FP_LEVITATION] ) )
+	{
+		pm->ps->pm_flags |= PMF_FORCE_JUMP_DAMP;
+	}
+}
+
+static void PM_ForceJumpReleaseDamp( void )
+{
+	float baseVel, dampTime;
+
+	if ( !(pm->ps->pm_flags&PMF_FORCE_JUMP_DAMP) )
+	{
 		return;
 	}
 
-	maxVel = PM_ForceJumpBaseVelocity( level, pm->ps->origin[2]-pm->ps->fd.forceJumpZStart );
-	if ( pm->ps->velocity[2] > maxVel )
+	if ( (pm->ps->pm_flags&PMF_JUMP_HELD)
+		|| !PM_ForceJumpCanDamp()
+		|| pm->ps->origin[2]-pm->ps->fd.forceJumpZStart >= PM_ForceJumpMaxHeight( pm->ps->fd.forcePowerLevel[FP_LEVITATION] ) )
 	{
-		pm->ps->velocity[2] = maxVel;
+		pm->ps->pm_flags &= ~PMF_FORCE_JUMP_DAMP;
+		return;
+	}
+
+	baseVel = PM_ForceJumpBaseVelocity( pm->ps->fd.forcePowerLevel[FP_LEVITATION], pm->ps->origin[2]-pm->ps->fd.forceJumpZStart );
+	if ( pm->ps->velocity[2] <= baseVel )
+	{
+		pm->ps->pm_flags &= ~PMF_FORCE_JUMP_DAMP;
+		return;
+	}
+
+	dampTime = bg_forceJumpReleaseDamp.value/1000.0f;
+	if ( dampTime <= 0.0f )
+	{
+		pm->ps->velocity[2] = baseVel;
+	}
+	else
+	{
+		pm->ps->velocity[2] -= (pm->ps->velocity[2]-baseVel)*(1.0f-exp(-pml.frametime/dampTime));
 	}
 }
 
@@ -2152,9 +2241,9 @@ static qboolean PM_CheckJump( void )
 				}
 				else if ( curHeight > forceJumpHeight[0] && curHeight < PM_ForceJumpMaxHeight( pm->ps->fd.forcePowerLevel[FP_LEVITATION] ) - forceJumpHeight[0] )
 				{//still have some headroom, don't totally stop it
-					if ( pm->ps->velocity[2] > JUMP_VELOCITY )
+					if ( pm->ps->velocity[2] > PM_ForceJumpApexSpeed( pm->ps->fd.forcePowerLevel[FP_LEVITATION] ) )
 					{
-						pm->ps->velocity[2] = JUMP_VELOCITY;
+						pm->ps->velocity[2] = PM_ForceJumpApexSpeed( pm->ps->fd.forcePowerLevel[FP_LEVITATION] );
 					}
 				}
 				else
@@ -2162,9 +2251,9 @@ static qboolean PM_CheckJump( void )
 					//pm->ps->velocity[2] = 0;
 					//rww - changed for the sake of balance in multiplayer
 
-					if ( pm->ps->velocity[2] > JUMP_VELOCITY )
+					if ( pm->ps->velocity[2] > PM_ForceJumpApexSpeed( pm->ps->fd.forcePowerLevel[FP_LEVITATION] ) )
 					{
-						pm->ps->velocity[2] = JUMP_VELOCITY;
+						pm->ps->velocity[2] = PM_ForceJumpApexSpeed( pm->ps->fd.forcePowerLevel[FP_LEVITATION] );
 					}
 				}
 				pm->cmd.upmove = 0;
@@ -10765,10 +10854,11 @@ void PmoveSingle (pmove_t *pmove) {
 		// not holding jump
 		if ( pm->ps->pm_flags & PMF_JUMP_HELD )
 		{
-			PM_ForceJumpReleaseCut();
+			PM_ForceJumpReleaseStart();
 		}
 		pm->ps->pm_flags &= ~PMF_JUMP_HELD;
 	}
+	PM_ForceJumpReleaseDamp();
 
 	// decide if backpedaling animations should be used
 	if ( pm->cmd.forwardmove < 0 ) {
