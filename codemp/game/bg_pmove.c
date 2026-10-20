@@ -3943,7 +3943,10 @@ static void PM_CrashLand( void ) {
 		delta *= 2;
 	}
 
-	if (pm->ps->legsAnim == BOTH_A7_KICK_F_AIR ||
+	if (pm->ps->forceHandExtend == HANDEXTEND_KNOCKDOWN)
+	{ //knocked down: keep the knockdown anim, setting another one for a frame restarts it
+	}
+	else if (pm->ps->legsAnim == BOTH_A7_KICK_F_AIR ||
 		pm->ps->legsAnim == BOTH_A7_KICK_B_AIR ||
 		pm->ps->legsAnim == BOTH_A7_KICK_R_AIR ||
 		pm->ps->legsAnim == BOTH_A7_KICK_L_AIR)
@@ -4012,7 +4015,8 @@ static void PM_CrashLand( void ) {
 		}
 	}
 
-	if (pm->ps->weapon != WP_SABER && pm->ps->weapon != WP_MELEE && !PM_IsRocketTrooper())
+	if (pm->ps->weapon != WP_SABER && pm->ps->weapon != WP_MELEE && !PM_IsRocketTrooper() &&
+		pm->ps->forceHandExtend != HANDEXTEND_KNOCKDOWN)
 	{ //saber handles its own anims
 		//This will push us back into our weaponready stance from the land anim.
 		if (pm->ps->weapon == WP_DISRUPTOR && pm->ps->zoomMode == 1)
