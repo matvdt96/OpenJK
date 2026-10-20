@@ -3343,6 +3343,14 @@ void G_RunFrame( int levelTime ) {
 			WP_ForcePowersUpdate(ent, &ent->client->pers.cmd );
 			WP_SaberPositionUpdate(ent, &ent->client->pers.cmd);
 			WP_SaberStartMissileBlockCheck(ent, &ent->client->pers.cmd);
+
+			if ( g_npcPushFlightThink.integer &&
+				ent->nextthink > level.time &&
+				ent->client->ps.groundEntityNum == ENTITYNUM_NONE &&
+				(ent->client->pushEffectTime > level.time || ent->client->ps.forceHandExtend == HANDEXTEND_KNOCKDOWN) )
+			{ //thrown through the air by a push: move every frame, not every FRAMETIME/2, so it doesn't stutter
+				ent->nextthink = level.time;
+			}
 		}
 
 		G_RunThink( ent );
