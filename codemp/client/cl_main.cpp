@@ -54,6 +54,7 @@ cvar_t	*cl_timeout;
 cvar_t	*cl_maxpackets;
 cvar_t	*cl_packetdup;
 cvar_t	*cl_timeNudge;
+cvar_t	*cl_syncCmdTime;
 cvar_t	*cl_showTimeDelta;
 cvar_t	*cl_freezeDemo;
 
@@ -2182,6 +2183,7 @@ static float avgFrametime=0.0;
 extern void SE_CheckForLanguageUpdates(void);
 void CL_Frame ( int msec ) {
 	qboolean takeVideoFrame = qfalse;
+	int syncCmdTime;
 
 	if ( !com_cl_running->integer ) {
 		return;
@@ -2241,14 +2243,22 @@ void CL_Frame ( int msec ) {
 	// drop the connection
 	CL_CheckTimeout();
 
+	syncCmdTime = cl_syncCmdTime->integer;
+
+	// decide on the serverTime to render
+	if ( syncCmdTime ) {
+		CL_SetCGameTime();
+	}
+
 	// send intentions now
 	CL_SendCmd();
 
 	// resend a connection request if necessary
 	CL_CheckForResend();
 
-	// decide on the serverTime to render
-	CL_SetCGameTime();
+	if ( !syncCmdTime ) {
+		CL_SetCGameTime();
+	}
 
 	// update the screen
 	SCR_UpdateScreen();
@@ -2748,6 +2758,7 @@ void CL_Init( void ) {
 	cl_timeout = Cvar_Get ("cl_timeout", "200", 0);
 
 	cl_timeNudge = Cvar_Get ("cl_timeNudge", "0", CVAR_TEMP );
+	cl_syncCmdTime = Cvar_Get ("cl_syncCmdTime", "1", CVAR_ARCHIVE_ND, "Build user commands at the time being rendered (0 = one frame behind, original behavior)" );
 	cl_shownet = Cvar_Get ("cl_shownet", "0", CVAR_TEMP );
 	cl_showSend = Cvar_Get ("cl_showSend", "0", CVAR_TEMP );
 	cl_showTimeDelta = Cvar_Get ("cl_showTimeDelta", "0", CVAR_TEMP );
