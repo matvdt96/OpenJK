@@ -55,6 +55,7 @@ cvar_t	*cl_maxpackets;
 cvar_t	*cl_packetdup;
 cvar_t	*cl_timeNudge;
 cvar_t	*cl_syncCmdTime;
+cvar_t	*cl_timeDeltaBand;
 cvar_t	*cl_showTimeDelta;
 cvar_t	*cl_freezeDemo;
 
@@ -2759,6 +2760,7 @@ void CL_Init( void ) {
 
 	cl_timeNudge = Cvar_Get ("cl_timeNudge", "0", CVAR_TEMP );
 	cl_syncCmdTime = Cvar_Get ("cl_syncCmdTime", "1", CVAR_ARCHIVE_ND, "Build user commands at the time being rendered (0 = one frame behind, original behavior)" );
+	cl_timeDeltaBand = Cvar_Get ("cl_timeDeltaBand", "10", CVAR_ARCHIVE_ND, "Msec of tolerance before the client clock is nudged forward (0 = nudge on every snapshot, original behavior)" );
 	cl_shownet = Cvar_Get ("cl_shownet", "0", CVAR_TEMP );
 	cl_showSend = Cvar_Get ("cl_showSend", "0", CVAR_TEMP );
 	cl_showTimeDelta = Cvar_Get ("cl_showTimeDelta", "0", CVAR_TEMP );

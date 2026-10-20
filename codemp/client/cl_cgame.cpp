@@ -622,6 +622,7 @@ or bursted delayed packets.
 */
 
 #define	RESET_TIME	500
+#define	SNAP_LEAD_NONE	-100000
 
 void CL_AdjustTimeDelta( void ) {
 	int		newDelta;
@@ -660,12 +661,13 @@ void CL_AdjustTimeDelta( void ) {
 			if ( cl.extrapolatedSnapshot ) {
 				cl.extrapolatedSnapshot = qfalse;
 				cl.serverTimeDelta -= 2;
-			} else {
+			} else if ( cl_timeDeltaBand->integer <= 0 || cl.snapLeadMax < -5 - cl_timeDeltaBand->integer ) {
 				// otherwise, move our sense of time forward to minimize total latency
 				cl.serverTimeDelta++;
 			}
 		}
 	}
+	cl.snapLeadMax = SNAP_LEAD_NONE;
 
 	if ( cl_showTimeDelta->integer ) {
 		Com_Printf( "%i ", cl.serverTimeDelta );
@@ -690,6 +692,7 @@ void CL_FirstSnapshot( void ) {
 
 	// set the timedelta so we are exactly on this first frame
 	cl.serverTimeDelta = cl.snap.serverTime - cls.realtime;
+	cl.snapLeadMax = SNAP_LEAD_NONE;
 	cl.oldServerTime = cl.snap.serverTime;
 
 	clc.timeDemoBaseTime = cl.snap.serverTime;
@@ -789,6 +792,9 @@ void CL_SetCGameTime( void ) {
 		// so we will try and adjust back a bit when the next snapshot arrives
 		if ( cls.realtime + cl.serverTimeDelta >= cl.snap.serverTime - 5 ) {
 			cl.extrapolatedSnapshot = qtrue;
+		}
+		if ( cls.realtime + cl.serverTimeDelta - cl.snap.serverTime > cl.snapLeadMax ) {
+			cl.snapLeadMax = cls.realtime + cl.serverTimeDelta - cl.snap.serverTime;
 		}
 	}
 

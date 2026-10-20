@@ -103,6 +103,7 @@ typedef struct clientActive_s {
 									// this value changes as net lag varies
 	qboolean	extrapolatedSnapshot;	// set if any cgame frame has been forced to extrapolate
 									// cleared when CL_AdjustTimeDelta looks at it
+	int			snapLeadMax;		// highest (render time - latest snapshot time) since the last adjustment
 	qboolean	newSnapshots;		// set on parse of any valid packet
 
 	gameState_t	gameState;			// configstrings
@@ -398,6 +399,7 @@ extern	cvar_t	*cl_shownet;
 extern	cvar_t	*cl_showSend;
 extern	cvar_t	*cl_timeNudge;
 extern	cvar_t	*cl_syncCmdTime;
+extern	cvar_t	*cl_timeDeltaBand;
 extern	cvar_t	*cl_showTimeDelta;
 extern	cvar_t	*cl_freezeDemo;
 
