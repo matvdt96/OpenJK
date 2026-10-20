@@ -461,6 +461,8 @@ static void CG_UpdateThirdPersonTargetDamp(void)
 		// the ratio should be initialized into a chart ultimately.
 		if ( cg_smoothCamera.integer )
 			ratio = powf(dampfactor, dtime);
+		else if ( cg_thirdPersonDampMsec.value > 0.0f )
+			ratio = powf( dampfactor, (float)(cg.time-cameraLastFrame) / cg_thirdPersonDampMsec.value );
 		else
 			ratio = Q_powf( dampfactor, dtime );
 
@@ -551,6 +553,8 @@ static void CG_UpdateThirdPersonCameraDamp(void)
 		// the ratio should be initialized into a chart ultimately.
 		if ( cg_smoothCamera.integer )
 			ratio = powf(dampfactor, dtime);
+		else if ( cg_thirdPersonDampMsec.value > 0.0f )
+			ratio = powf( dampfactor, (float)(cg.time-cameraLastFrame) / cg_thirdPersonDampMsec.value );
 		else
 			ratio = Q_powf( dampfactor, dtime );
 
