@@ -6299,6 +6299,72 @@ static void CG_ScanForCrosshairEntity( void ) {
 	cg.crosshairClientTime = cg.time;
 }
 
+static void CG_DrawNameplates( void ) {
+	static vec4_t	redColor = { 1.0f, 0.25f, 0.25f, 1.0f };
+	static vec4_t	blueColor = { 0.35f, 0.55f, 1.0f, 1.0f };
+	const float		scale = 0.6f;
+	float			range, fadeStart;
+	int				i;
+
+	if ( !cg_drawNameplates.integer || cgs.gametype < GT_TEAM ) {
+		return;
+	}
+
+	range = cg_nameplateRange.value;
+	if ( range <= 0.0f ) {
+		return;
+	}
+	fadeStart = range * 0.75f;
+
+	for ( i = 0; i < MAX_CLIENTS; i++ ) {
+		centity_t		*cent = &cg_entities[i];
+		clientInfo_t	*ci = &cgs.clientinfo[i];
+		vec3_t			head;
+		vec4_t			color;
+		trace_t			tr;
+		float			dist, x, y;
+
+		if ( i == cg.snap->ps.clientNum || !ci->infoValid || !cent->currentValid ) {
+			continue;
+		}
+		if ( ci->team != TEAM_RED && ci->team != TEAM_BLUE ) {
+			continue;
+		}
+		if ( cent->currentState.eFlags & (EF_DEAD|EF_NODRAW) ) {
+			continue;
+		}
+		if ( cent->currentState.powerups & (1 << PW_CLOAKED) ) {
+			continue;
+		}
+
+		VectorCopy( cent->lerpOrigin, head );
+		head[2] += 64.0f;
+
+		dist = Distance( cg.refdef.vieworg, head );
+		if ( dist >= range ) {
+			continue;
+		}
+
+		CG_Trace( &tr, cg.refdef.vieworg, NULL, NULL, head, cg.snap->ps.clientNum, CONTENTS_SOLID );
+		if ( tr.fraction < 1.0f ) {
+			continue;
+		}
+
+		if ( !CG_WorldCoordToScreenCoordFloat( head, &x, &y ) ) {
+			continue;
+		}
+
+		VectorCopy4( (ci->team == TEAM_RED) ? redColor : blueColor, color );
+		if ( dist > fadeStart ) {
+			color[3] = 1.0f - (dist - fadeStart) / (range - fadeStart);
+		}
+
+		x -= CG_Text_Width( ci->cleanname, scale, FONT_SMALL ) * 0.5f;
+		CG_Text_Paint( x, y, scale, color, ci->cleanname, 0, 0, ITEM_TEXTSTYLE_SHADOWED, FONT_SMALL );
+	}
+	trap->R_SetColor( NULL );
+}
+
 /*
 =====================
 CG_DrawCrosshairNames
@@ -8103,6 +8169,7 @@ static void CG_Draw2D( void ) {
 */
 	if ( cg.snap->ps.persistant[PERS_TEAM] == TEAM_SPECTATOR ) {
 		CG_DrawSpectator();
+		CG_DrawNameplates();
 		CG_DrawCrosshair(NULL, 0);
 		CG_DrawCrosshairNames();
 		CG_SaberClashFlare();
@@ -8119,6 +8186,8 @@ static void CG_Draw2D( void ) {
 			//CG_DrawTemporaryStats();
 
 			CG_DrawAmmoWarning();
+
+			CG_DrawNameplates();
 
 			CG_DrawCrosshairNames();
 
