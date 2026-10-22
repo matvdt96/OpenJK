@@ -1798,7 +1798,13 @@ typedef enum {
 	WAVES_ITEM_POWER,
 	WAVES_ITEM_MAXHEALTH,
 	WAVES_ITEM_MAXSHIELD,
-	WAVES_ITEM_SHIELD
+	WAVES_ITEM_SHIELD,
+	WAVES_ITEM_WEAPONDAMAGE,
+	WAVES_ITEM_SABERDAMAGE,
+	WAVES_ITEM_FORCEDAMAGE,
+	WAVES_ITEM_MAXAMMO,
+	WAVES_ITEM_HEALTHREGEN,
+	WAVES_ITEM_FORCEREGEN
 } wavesItemType_t;
 
 typedef struct wavesShopItem_s {
@@ -1808,7 +1814,7 @@ typedef struct wavesShopItem_s {
 	int		role;		// WAVES_ROLE_NONE = both roles
 	int		type;		// wavesItemType_t
 	int		param;		// weapon or force power
-	int		amount;		// consumables
+	int		amount;		// consumables: ammo given; upgrades: percent per level; health regen: health per second
 	int		baseLevel;	// level the force user starts with
 	int		numLevels;	// 0 = can be bought again and again at price[0]
 	int		price[MAX_WAVES_ITEM_LEVELS];

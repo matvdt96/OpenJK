@@ -2145,7 +2145,7 @@ int Pickup_Holdable( gentity_t *ent, gentity_t *other ) {
 
 void Add_Ammo (gentity_t *ent, int weapon, int count)
 {
-	int max = ammoData[weapon].max;
+	int max = level.gametype == GT_WAVES ? G_WavesMaxAmmo( ent, weapon ) : ammoData[weapon].max;
 
 	if (ent->client->ps.eFlags & EF_DOUBLE_AMMO)
 	{ // fix: double ammo for siege

@@ -811,6 +811,11 @@ void ClientTimerActions( gentity_t *ent, int msec ) {
 	{
 		client->timeResidual -= 1000;
 
+		if ( level.gametype == GT_WAVES && ent->s.number < MAX_CLIENTS ) {
+			G_WavesTimerActions( ent );
+			continue;
+		}
+
 		// count down health when over max
 		if ( ent->health > client->ps.stats[STAT_MAX_HEALTH] ) {
 			ent->health--;

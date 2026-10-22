@@ -3156,6 +3156,12 @@ static qboolean BG_WavesParseItem( const char **p, wavesShopItem_t *item ) {
 			else if ( !Q_stricmp( token, "maxhealth" ) )	item->type = WAVES_ITEM_MAXHEALTH;
 			else if ( !Q_stricmp( token, "maxshield" ) )	item->type = WAVES_ITEM_MAXSHIELD;
 			else if ( !Q_stricmp( token, "shield" ) )		item->type = WAVES_ITEM_SHIELD;
+			else if ( !Q_stricmp( token, "weapondamage" ) )	item->type = WAVES_ITEM_WEAPONDAMAGE;
+			else if ( !Q_stricmp( token, "saberdamage" ) )	item->type = WAVES_ITEM_SABERDAMAGE;
+			else if ( !Q_stricmp( token, "forcedamage" ) )	item->type = WAVES_ITEM_FORCEDAMAGE;
+			else if ( !Q_stricmp( token, "maxammo" ) )		item->type = WAVES_ITEM_MAXAMMO;
+			else if ( !Q_stricmp( token, "healthregen" ) )	item->type = WAVES_ITEM_HEALTHREGEN;
+			else if ( !Q_stricmp( token, "forceregen" ) )	item->type = WAVES_ITEM_FORCEREGEN;
 			else Com_Printf( S_COLOR_YELLOW "%s: unknown type '%s'\n", WAVES_SHOP_FILE, token );
 		}
 		else if ( !Q_stricmp( key, "weapon" ) ) {
