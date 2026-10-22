@@ -66,6 +66,7 @@ extern void NPC_Protocol_Precache( void );
 extern void Boba_Precache( void );
 extern void NPC_Wampa_Precache( void );
 gentity_t *NPC_SpawnType( gentity_t *ent, char *npc_type, char *targetname, qboolean isVehicle );
+gentity_t *NPC_SpawnTypeAt( vec3_t origin, float yaw, char *npc_type, char *targetname, qboolean isVehicle, team_t teamowner );
 
 extern void Rancor_SetBolts( gentity_t *self );
 extern void Wampa_SetBolts( gentity_t *self );
@@ -3952,18 +3953,8 @@ NPC_Spawn_f
 
 gentity_t *NPC_SpawnType( gentity_t *ent, char *npc_type, char *targetname, qboolean isVehicle )
 {
-	gentity_t		*NPCspawner = G_Spawn();
 	vec3_t			forward, end;
 	trace_t			trace;
-
-	if(!NPCspawner)
-	{
-		Com_Printf( S_COLOR_RED"NPC_Spawn Error: Out of entities!\n" );
-		return NULL;
-	}
-
-	NPCspawner->think = G_FreeEntity;
-	NPCspawner->nextthink = level.time + FRAMETIME;
 
 	if ( !npc_type )
 	{
@@ -3993,10 +3984,27 @@ gentity_t *NPC_SpawnType( gentity_t *ent, char *npc_type, char *targetname, qboo
 	trap->Trace(&trace, trace.endpos, NULL, NULL, end, 0, MASK_SOLID, qfalse, 0, 0);
 	VectorCopy(trace.endpos, end);
 	end[2] += 24;
-	G_SetOrigin(NPCspawner, end);
-	VectorCopy(NPCspawner->r.currentOrigin, NPCspawner->s.origin);
 	//set the yaw so that they face away from player
-	NPCspawner->s.angles[1] = ent->client->ps.viewangles[1];
+	return NPC_SpawnTypeAt( end, ent->client->ps.viewangles[1], npc_type, targetname, isVehicle, TEAM_FREE );
+}
+
+gentity_t *NPC_SpawnTypeAt( vec3_t origin, float yaw, char *npc_type, char *targetname, qboolean isVehicle, team_t teamowner )
+{
+	gentity_t		*NPCspawner = G_Spawn();
+
+	if(!NPCspawner)
+	{
+		Com_Printf( S_COLOR_RED"NPC_Spawn Error: Out of entities!\n" );
+		return NULL;
+	}
+
+	NPCspawner->think = G_FreeEntity;
+	NPCspawner->nextthink = level.time + FRAMETIME;
+
+	G_SetOrigin(NPCspawner, origin);
+	VectorCopy(NPCspawner->r.currentOrigin, NPCspawner->s.origin);
+	NPCspawner->s.angles[1] = yaw;
+	NPCspawner->s.teamowner = teamowner;
 
 	trap->LinkEntity((sharedEntity_t *)NPCspawner);
 

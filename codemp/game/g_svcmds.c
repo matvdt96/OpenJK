@@ -468,6 +468,29 @@ void Svcmd_Say_f( void ) {
 	trap->SendServerCommand( -1, va("print \"server: %s\n\"", text ) );
 }
 
+void Svcmd_Waves_f( void ) {
+	char	cmd[MAX_TOKEN_CHARS];
+
+	if ( level.gametype != GT_WAVES ) {
+		Com_Printf( "Not in a Waves game\n" );
+		return;
+	}
+
+	trap->Argv( 1, cmd, sizeof( cmd ) );
+	if ( !Q_stricmp( cmd, "kill" ) ) {
+		G_WavesKillAll();
+	}
+	else if ( !Q_stricmp( cmd, "round" ) && trap->Argc() > 2 ) {
+		trap->Argv( 2, cmd, sizeof( cmd ) );
+		G_WavesSetRound( Com_Clampi( 1, 9999, atoi( cmd ) ) );
+	}
+	else if ( cmd[0] ) {
+		Com_Printf( "usage: waves [kill | round <n>]\n" );
+		return;
+	}
+	G_WavesPrintStatus();
+}
+
 typedef struct svcmd_s {
 	const char	*name;
 	void		(*func)(void);
@@ -490,6 +513,7 @@ svcmd_t svcmds[] = {
 	{ "say",						Svcmd_Say_f,						qtrue },
 	{ "toggleallowvote",			Svcmd_ToggleAllowVote_f,			qfalse },
 	{ "toggleuserinfovalidation",	Svcmd_ToggleUserinfoValidation_f,	qfalse },
+	{ "waves",						Svcmd_Waves_f,						qfalse },
 };
 static const size_t numsvcmds = ARRAY_LEN( svcmds );
 

@@ -79,6 +79,7 @@ set(MPGameGameFiles
 	"${MPDir}/game/g_utils.c"
 	"${MPDir}/game/g_vehicles.c"
 	"${MPDir}/game/g_vehicleTurret.c"
+	"${MPDir}/game/g_waves.c"
 	"${MPDir}/game/g_weapon.c"
 	"${MPDir}/game/NPC.c"
 	"${MPDir}/game/NPC_AI_Atst.c"

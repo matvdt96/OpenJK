@@ -1369,6 +1369,15 @@ qboolean OnSameTeam( gentity_t *ent1, gentity_t *ent2 );
 void Team_CheckDroppedItem( gentity_t *dropped );
 
 //
+// g_waves.c
+//
+void G_WavesInit( void );
+void G_WavesRunFrame( void );
+void G_WavesKillAll( void );
+void G_WavesSetRound( int round );
+void G_WavesPrintStatus( void );
+
+//
 // g_mem.c
 //
 void *G_Alloc( int size );

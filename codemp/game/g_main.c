@@ -373,6 +373,10 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 		G_LoadArenas();
 	}
 
+	if ( level.gametype == GT_WAVES ) {
+		G_WavesInit();
+	}
+
 	if ( level.gametype == GT_DUEL || level.gametype == GT_POWERDUEL )
 	{
 		G_LogPrintf("Duel Tournament Begun: kill limit %d, win limit: %d\n", fraglimit.integer, duel_fraglimit.integer );
@@ -3414,6 +3418,10 @@ void G_RunFrame( int levelTime ) {
 
 	// see if it is time to end the level
 	CheckExitRules();
+
+	if ( level.gametype == GT_WAVES ) {
+		G_WavesRunFrame();
+	}
 
 	// update to team status?
 	CheckTeamStatus();
