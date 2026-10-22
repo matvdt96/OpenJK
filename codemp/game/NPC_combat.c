@@ -1494,106 +1494,109 @@ gentity_t *NPC_PickEnemy( gentity_t *closestTo, int enemyTeam, qboolean checkVis
 		minVis = VIS_360;
 	}
 
-	//OJKFIXME: clientnum 0
 	//OJKFIXME: choice[] is not size checked?
 	if( findPlayersFirst )
 	{//try to find a player first
-		newenemy = &g_entities[0];
-		if( newenemy->client && !(newenemy->flags & FL_NOTARGET) && !(newenemy->s.eFlags & EF_NODRAW))
+		for ( entNum = 0; entNum < level.maxclients; entNum++ )
 		{
-			if( newenemy->health > 0 )
+			newenemy = &g_entities[entNum];
+			failed = qfalse;
+			if( newenemy->inuse && newenemy->client && !(newenemy->flags & FL_NOTARGET) && !(newenemy->s.eFlags & EF_NODRAW))
 			{
-				if( NPC_ValidEnemy( newenemy) )//enemyTeam == TEAM_PLAYER || newenemy->client->playerTeam == enemyTeam || ( enemyTeam == TEAM_PLAYER ) )
-				{//FIXME:  check for range and FOV or vis?
-					if( newenemy != NPCS.NPC->lastEnemy )
-					{//Make sure we're not just going back and forth here
-						if ( trap->InPVS(newenemy->r.currentOrigin, NPCS.NPC->r.currentOrigin) )
-						{
-							if(NPCS.NPCInfo->behaviorState == BS_INVESTIGATE ||	NPCS.NPCInfo->behaviorState == BS_PATROL)
+				if( newenemy->health > 0 )
+				{
+					if( NPC_ValidEnemy( newenemy) )//enemyTeam == TEAM_PLAYER || newenemy->client->playerTeam == enemyTeam || ( enemyTeam == TEAM_PLAYER ) )
+					{//FIXME:  check for range and FOV or vis?
+						if( newenemy != NPCS.NPC->lastEnemy )
+						{//Make sure we're not just going back and forth here
+							if ( trap->InPVS(newenemy->r.currentOrigin, NPCS.NPC->r.currentOrigin) )
 							{
-								if(!NPCS.NPC->enemy)
+								if(NPCS.NPCInfo->behaviorState == BS_INVESTIGATE ||	NPCS.NPCInfo->behaviorState == BS_PATROL)
 								{
-									if(!InVisrange(newenemy))
+									if(!NPCS.NPC->enemy)
 									{
-										failed = qtrue;
-									}
-									else if(NPC_CheckVisibility ( newenemy, CHECK_360|CHECK_FOV|CHECK_VISRANGE ) != VIS_FOV)
-									{
-										failed = qtrue;
-									}
-								}
-							}
-
-							if ( !failed )
-							{
-								VectorSubtract( closestTo->r.currentOrigin, newenemy->r.currentOrigin, diff );
-								relDist = VectorLengthSquared(diff);
-								if ( newenemy->client->hiddenDist > 0 )
-								{
-									if( relDist > newenemy->client->hiddenDist*newenemy->client->hiddenDist )
-									{
-										//out of hidden range
-										if ( VectorLengthSquared( newenemy->client->hiddenDir ) )
-										{//They're only hidden from a certain direction, check
-											float	dot;
-											VectorNormalize( diff );
-											dot = DotProduct( newenemy->client->hiddenDir, diff );
-											if ( dot > 0.5 )
-											{//I'm not looking in the right dir toward them to see them
-												failed = qtrue;
-											}
-											else
-											{
-												Debug_Printf(&d_npcai, DEBUG_LEVEL_INFO, "%s saw %s trying to hide - hiddenDir %s targetDir %s dot %f\n", NPCS.NPC->targetname, newenemy->targetname, vtos(newenemy->client->hiddenDir), vtos(diff), dot );
-											}
+										if(!InVisrange(newenemy))
+										{
+											failed = qtrue;
 										}
-										else
+										else if(NPC_CheckVisibility ( newenemy, CHECK_360|CHECK_FOV|CHECK_VISRANGE ) != VIS_FOV)
 										{
 											failed = qtrue;
 										}
 									}
-									else
-									{
-										Debug_Printf(&d_npcai, DEBUG_LEVEL_INFO, "%s saw %s trying to hide - hiddenDist %f\n", NPCS.NPC->targetname, newenemy->targetname, newenemy->client->hiddenDist );
-									}
 								}
 
-								if(!failed)
+								if ( !failed )
 								{
-									if(findClosest)
+									VectorSubtract( closestTo->r.currentOrigin, newenemy->r.currentOrigin, diff );
+									relDist = VectorLengthSquared(diff);
+									if ( newenemy->client->hiddenDist > 0 )
 									{
-										if(relDist < bestDist)
+										if( relDist > newenemy->client->hiddenDist*newenemy->client->hiddenDist )
 										{
-											if(!NPC_EnemyTooFar(newenemy, relDist, qfalse))
-											{
-												if(checkVis)
+											//out of hidden range
+											if ( VectorLengthSquared( newenemy->client->hiddenDir ) )
+											{//They're only hidden from a certain direction, check
+												float	dot;
+												VectorNormalize( diff );
+												dot = DotProduct( newenemy->client->hiddenDir, diff );
+												if ( dot > 0.5 )
+												{//I'm not looking in the right dir toward them to see them
+													failed = qtrue;
+												}
+												else
 												{
-													if( NPC_CheckVisibility ( newenemy, visChecks ) == minVis )
+													Debug_Printf(&d_npcai, DEBUG_LEVEL_INFO, "%s saw %s trying to hide - hiddenDir %s targetDir %s dot %f\n", NPCS.NPC->targetname, newenemy->targetname, vtos(newenemy->client->hiddenDir), vtos(diff), dot );
+												}
+											}
+											else
+											{
+												failed = qtrue;
+											}
+										}
+										else
+										{
+											Debug_Printf(&d_npcai, DEBUG_LEVEL_INFO, "%s saw %s trying to hide - hiddenDist %f\n", NPCS.NPC->targetname, newenemy->targetname, newenemy->client->hiddenDist );
+										}
+									}
+
+									if(!failed)
+									{
+										if(findClosest)
+										{
+											if(relDist < bestDist)
+											{
+												if(!NPC_EnemyTooFar(newenemy, relDist, qfalse))
+												{
+													if(checkVis)
+													{
+														if( NPC_CheckVisibility ( newenemy, visChecks ) == minVis )
+														{
+															bestDist = relDist;
+															closestEnemy = newenemy;
+														}
+													}
+													else
 													{
 														bestDist = relDist;
 														closestEnemy = newenemy;
 													}
 												}
-												else
-												{
-													bestDist = relDist;
-													closestEnemy = newenemy;
-												}
 											}
 										}
-									}
-									else if(!NPC_EnemyTooFar(newenemy, 0, qfalse))
-									{
-										if(checkVis)
+										else if(!NPC_EnemyTooFar(newenemy, 0, qfalse))
 										{
-											if( NPC_CheckVisibility ( newenemy, CHECK_360|CHECK_FOV|CHECK_VISRANGE ) == VIS_FOV )
+											if(checkVis)
+											{
+												if( NPC_CheckVisibility ( newenemy, CHECK_360|CHECK_FOV|CHECK_VISRANGE ) == VIS_FOV )
+												{
+													choice[num_choices++] = newenemy->s.number;
+												}
+											}
+											else
 											{
 												choice[num_choices++] = newenemy->s.number;
 											}
-										}
-										else
-										{
-											choice[num_choices++] = newenemy->s.number;
 										}
 									}
 								}

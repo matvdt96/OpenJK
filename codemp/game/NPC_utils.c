@@ -1346,9 +1346,8 @@ gentity_t *NPC_PickEnemyExt( qboolean checkAlerts )
 
 			if ( event->level >= AEL_DISCOVERED )
 			{
-				//If it's the player, attack him
-				//OJKFIXME: clientnum 0
-				if ( event->owner == &g_entities[0] )
+				//If it's a player, attack him
+				if ( NPC_IsLivePlayer( event->owner ) )
 					return event->owner;
 
 				//If it's on our team, then take its enemy as well
@@ -1359,6 +1358,73 @@ gentity_t *NPC_PickEnemyExt( qboolean checkAlerts )
 	}
 
 	return NULL;
+}
+
+/*
+-------------------------
+NPC_IsLivePlayer
+-------------------------
+*/
+
+qboolean NPC_IsLivePlayer( gentity_t *ent )
+{
+	return ( ent && ent->inuse && ent->client && ent->s.number < MAX_CLIENTS
+		&& ent->client->pers.connected == CON_CONNECTED
+		&& ent->client->sess.sessionTeam != TEAM_SPECTATOR
+		&& ent->client->tempSpectate < level.time
+		&& ent->health > 0 );
+}
+
+/*
+-------------------------
+NPC_ClosestLivePlayer
+-------------------------
+*/
+
+gentity_t *NPC_ClosestLivePlayer( vec3_t origin, float maxDist )
+{
+	gentity_t	*best = NULL;
+	float		bestDist = maxDist * maxDist;
+	int			i;
+
+	for ( i = 0; i < level.maxclients; i++ )
+	{
+		gentity_t	*player = &g_entities[i];
+		float		dist;
+
+		if ( !NPC_IsLivePlayer( player ) )
+			continue;
+
+		dist = DistanceSquared( origin, player->r.currentOrigin );
+		if ( dist < bestDist )
+		{
+			bestDist = dist;
+			best = player;
+		}
+	}
+
+	return best;
+}
+
+/*
+-------------------------
+NPC_InLivePlayerPVS
+-------------------------
+*/
+
+qboolean NPC_InLivePlayerPVS( vec3_t origin )
+{
+	int	i;
+
+	for ( i = 0; i < level.maxclients; i++ )
+	{
+		gentity_t *player = &g_entities[i];
+
+		if ( NPC_IsLivePlayer( player ) && trap->InPVS( origin, player->r.currentOrigin ) )
+			return qtrue;
+	}
+
+	return qfalse;
 }
 
 /*
@@ -1381,36 +1447,50 @@ NPC_CheckPlayerDistance
 
 static qboolean NPC_CheckPlayerDistance( void )
 {
-	return qfalse;//MOOT in MP
-	/*
-	float distance;
+	gentity_t	*closest = NULL;
+	float		bestDist;
+	int			i;
 
 	//Make sure we have an enemy
-	if ( NPC->enemy == NULL )
+	if ( NPCS.NPC->enemy == NULL )
 		return qfalse;
 
 	//Only do this for non-players
-	if ( NPC->enemy->s.number == 0 )
+	if ( NPCS.NPC->enemy->s.number < MAX_CLIENTS )
 		return qfalse;
 
 	//must be set up to get mad at player
-	if ( !NPC->client || NPC->client->enemyTeam != NPCTEAM_PLAYER )
+	if ( !NPCS.NPC->client || NPCS.NPC->client->enemyTeam != NPCTEAM_PLAYER )
 		return qfalse;
 
-	//Must be within our FOV
-	if ( InFOV( &g_entities[0], NPC, NPCInfo->stats.hfov, NPCInfo->stats.vfov ) == qfalse )
-		return qfalse;
+	bestDist = DistanceSquared( NPCS.NPC->r.currentOrigin, NPCS.NPC->enemy->r.currentOrigin );
+	for ( i = 0; i < level.maxclients; i++ )
+	{
+		gentity_t	*player = &g_entities[i];
+		float		dist;
 
-	distance = DistanceSquared( NPC->r.currentOrigin, NPC->enemy->r.currentOrigin );
+		if ( !NPC_IsLivePlayer( player ) || !NPC_ValidEnemy( player ) )
+			continue;
 
-	if ( distance > DistanceSquared( NPC->r.currentOrigin, g_entities[0].r.currentOrigin ) )
-	{ //rwwFIXMEFIXME: care about all clients not just client 0
-		G_SetEnemy( NPC, &g_entities[0] );
+		//Must be within our FOV
+		if ( InFOV( player, NPCS.NPC, NPCS.NPCInfo->stats.hfov, NPCS.NPCInfo->stats.vfov ) == qfalse )
+			continue;
+
+		dist = DistanceSquared( NPCS.NPC->r.currentOrigin, player->r.currentOrigin );
+		if ( dist < bestDist )
+		{
+			bestDist = dist;
+			closest = player;
+		}
+	}
+
+	if ( closest )
+	{
+		G_SetEnemy( NPCS.NPC, closest );
 		return qtrue;
 	}
 
 	return qfalse;
-	*/
 }
 
 /*

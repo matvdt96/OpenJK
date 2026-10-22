@@ -58,7 +58,7 @@ Howler_Patrol
 */
 void Howler_Patrol( void )
 {
-	vec3_t dif;
+	gentity_t *player;
 
 	NPCS.NPCInfo->localState = LSTATE_CLEAR;
 
@@ -76,13 +76,10 @@ void Howler_Patrol( void )
 		}
 	}
 
-	//rwwFIXMEFIXME: Care about all clients, not just client 0
-	//OJK: clientnum 0
-	VectorSubtract( g_entities[0].r.currentOrigin, NPCS.NPC->r.currentOrigin, dif );
-
-	if ( VectorLengthSquared( dif ) < 256 * 256 )
+	player = NPC_ClosestLivePlayer( NPCS.NPC->r.currentOrigin, 256 );
+	if ( player )
 	{
-		G_SetEnemy( NPCS.NPC, &g_entities[0] );
+		G_SetEnemy( NPCS.NPC, player );
 	}
 
 	if ( NPC_CheckEnemyExt( qtrue ) == qfalse )

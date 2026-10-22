@@ -941,9 +941,8 @@ void NPC_BSJump (void)
 void NPC_BSRemove (void)
 {
 	NPC_UpdateAngles ( qtrue, qtrue );
-	//OJKFIXME: clientnum 0
-	if( !trap->InPVS( NPCS.NPC->r.currentOrigin, g_entities[0].r.currentOrigin ) )//FIXME: use cg.vieworg?
-	{ //rwwFIXMEFIXME: Care about all clients instead of just 0?
+	if( !NPC_InLivePlayerPVS( NPCS.NPC->r.currentOrigin ) )//FIXME: use cg.vieworg?
+	{
 		G_UseTargets2( NPCS.NPC, NPCS.NPC, NPCS.NPC->target3 );
 		NPCS.NPC->s.eFlags |= EF_NODRAW;
 		NPCS.NPC->s.eType = ET_INVISIBLE;

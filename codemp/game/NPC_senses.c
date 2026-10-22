@@ -503,10 +503,9 @@ int G_CheckAlertEvents( gentity_t *self, qboolean checkSight, qboolean checkSoun
 	int bestSoundAlert = -1;
 	int bestSightAlert = -1;
 
-	//OJKFIXME: clientnum 0
-	if ( &g_entities[0] == NULL || g_entities[0].health <= 0 )
+	if ( !NPC_ClosestLivePlayer( self->r.currentOrigin, Q3_INFINITE ) )
 	{
-		//player is dead
+		//every player is dead
 		return -1;
 	}
 

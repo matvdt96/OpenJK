@@ -111,9 +111,8 @@ static void NPC_CheckAttacker( gentity_t *other, int mod )
 		}
 	}
 
-	//OJKFIXME: clientnum 0
 	//Special case player interactions
-	if ( other == &g_entities[0] )
+	if ( other->s.number < MAX_CLIENTS && other->client )
 	{
 		//Account for the skill level to skew the results
 		float	luckThreshold;
