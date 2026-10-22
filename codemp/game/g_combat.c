@@ -4589,6 +4589,10 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 		}
 		return;
 	}
+	if ( level.gametype == GT_WAVES ) {
+		damage = G_WavesScaleDamage( attacker, damage );
+	}
+
 	// reduce damage by the attacker's handicap value
 	// unless they are rocket jumping
 	if ( attacker->client

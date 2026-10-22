@@ -1379,6 +1379,7 @@ void G_WavesPrintStatus( void );
 qboolean G_WavesHoldSpawn( gentity_t *ent );
 void G_WavesMakeSpectator( gentity_t *ent );
 qboolean G_WavesSpawnNearTeammate( gentity_t *ent, vec3_t origin, vec3_t angles );
+int G_WavesScaleDamage( gentity_t *attacker, int damage );
 
 //
 // g_mem.c

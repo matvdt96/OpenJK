@@ -60,16 +60,34 @@ typedef enum {
 typedef struct wavesSettings_s {
 	int		firstDelay;
 	int		intermission;
-	int		maxAlive;
+	int		maxAliveBase;
+	int		maxAlivePerRound;
+	int		maxAliveMax;
 	int		countBase;
 	int		countPerRound;
 	int		spawnInterval;
+	int		spawnIntervalPerRound;
+	int		spawnIntervalMin;
 	int		spawnMinDist;
+	int		healthPerRound;
+	int		healthMax;
+	int		damagePerRound;
+	int		damageMax;
+	int		bossEvery;
+	int		bossHealth;
+	int		bossHealthGrowth;
 } wavesSettings_t;
+
+typedef struct waveEnemy_s {
+	int			num;
+	float		healthScale;
+	qboolean	scaled;
+} waveEnemy_t;
 
 static wavesSettings_t	wavesSettings;
 static waveGroup_t		waveGroups[MAX_WAVE_GROUPS];
 static int				numWaveGroups;
+static waveGroup_t		bossGroup;
 static char				wavesConfigstring[MAX_STRING_CHARS];
 
 static struct {
@@ -79,18 +97,31 @@ static struct {
 	int				toSpawn;
 	int				nextSpawnTime;
 	int				nextEnemyTime;
-	int				alive[MAX_WAVE_ALIVE];
+	qboolean		bossPending;
+	int				numBosses;
+	waveEnemy_t		alive[MAX_WAVE_ALIVE];
 	int				numAlive;
 } waves;
 
 static void G_WavesDefaultSettings( void ) {
 	wavesSettings.firstDelay = 5000;
 	wavesSettings.intermission = 10000;
-	wavesSettings.maxAlive = 12;
+	wavesSettings.maxAliveBase = 8;
+	wavesSettings.maxAlivePerRound = 1;
+	wavesSettings.maxAliveMax = 24;
 	wavesSettings.countBase = 6;
 	wavesSettings.countPerRound = 2;
 	wavesSettings.spawnInterval = 500;
+	wavesSettings.spawnIntervalPerRound = 25;
+	wavesSettings.spawnIntervalMin = 250;
 	wavesSettings.spawnMinDist = 512;
+	wavesSettings.healthPerRound = 4;
+	wavesSettings.healthMax = 200;
+	wavesSettings.damagePerRound = 2;
+	wavesSettings.damageMax = 150;
+	wavesSettings.bossEvery = 4;
+	wavesSettings.bossHealth = 5;
+	wavesSettings.bossHealthGrowth = 25;
 }
 
 static qboolean G_WavesParseInt( const char **p, int *out ) {
@@ -119,27 +150,30 @@ static void G_WavesParseSettings( const char **p ) {
 
 		if ( !Q_stricmp( token, "firstDelay" ) )			wavesSettings.firstDelay = value * 1000;
 		else if ( !Q_stricmp( token, "intermission" ) )		wavesSettings.intermission = value * 1000;
-		else if ( !Q_stricmp( token, "maxAlive" ) )			wavesSettings.maxAlive = Com_Clampi( 1, MAX_WAVE_ALIVE, value );
-		else if ( !Q_stricmp( token, "countBase" ) )		wavesSettings.countBase = value;
-		else if ( !Q_stricmp( token, "countPerRound" ) )	wavesSettings.countPerRound = value;
-		else if ( !Q_stricmp( token, "spawnInterval" ) )	wavesSettings.spawnInterval = value;
-		else if ( !Q_stricmp( token, "spawnMinDist" ) )		wavesSettings.spawnMinDist = value;
+		else if ( !Q_stricmp( token, "maxAliveBase" ) )			wavesSettings.maxAliveBase = value;
+		else if ( !Q_stricmp( token, "maxAlivePerRound" ) )		wavesSettings.maxAlivePerRound = value;
+		else if ( !Q_stricmp( token, "maxAliveMax" ) )			wavesSettings.maxAliveMax = value;
+		else if ( !Q_stricmp( token, "countBase" ) )			wavesSettings.countBase = value;
+		else if ( !Q_stricmp( token, "countPerRound" ) )		wavesSettings.countPerRound = value;
+		else if ( !Q_stricmp( token, "spawnInterval" ) )		wavesSettings.spawnInterval = value;
+		else if ( !Q_stricmp( token, "spawnIntervalPerRound" ) )	wavesSettings.spawnIntervalPerRound = value;
+		else if ( !Q_stricmp( token, "spawnIntervalMin" ) )		wavesSettings.spawnIntervalMin = value;
+		else if ( !Q_stricmp( token, "spawnMinDist" ) )			wavesSettings.spawnMinDist = value;
+		else if ( !Q_stricmp( token, "healthPerRound" ) )		wavesSettings.healthPerRound = value;
+		else if ( !Q_stricmp( token, "healthMax" ) )			wavesSettings.healthMax = value;
+		else if ( !Q_stricmp( token, "damagePerRound" ) )		wavesSettings.damagePerRound = value;
+		else if ( !Q_stricmp( token, "damageMax" ) )			wavesSettings.damageMax = value;
+		else if ( !Q_stricmp( token, "bossEvery" ) )			wavesSettings.bossEvery = value;
+		else if ( !Q_stricmp( token, "bossHealth" ) )			wavesSettings.bossHealth = value;
+		else if ( !Q_stricmp( token, "bossHealthGrowth" ) )		wavesSettings.bossHealthGrowth = value;
 		else Com_Printf( S_COLOR_YELLOW "%s: unknown setting '%s'\n", WAVES_FILE, token );
 	}
 }
 
-static void G_WavesParseGroup( const char **p ) {
-	waveGroup_t	*group;
+static void G_WavesParseGroup( const char **p, waveGroup_t *group ) {
 	waveNpc_t	*npc;
 	char		*token;
 
-	if ( numWaveGroups >= MAX_WAVE_GROUPS ) {
-		Com_Printf( S_COLOR_YELLOW "%s: too many groups (max %d)\n", WAVES_FILE, MAX_WAVE_GROUPS );
-		SkipBracedSection( p, 1 );
-		return;
-	}
-
-	group = &waveGroups[numWaveGroups];
 	memset( group, 0, sizeof( *group ) );
 	group->fromRound = 1;
 
@@ -174,10 +208,6 @@ static void G_WavesParseGroup( const char **p ) {
 			SkipRestOfLine( p );
 		}
 	}
-
-	if ( group->numNpcs ) {
-		numWaveGroups++;
-	}
 }
 
 static void G_WavesLoad( void ) {
@@ -189,6 +219,7 @@ static void G_WavesLoad( void ) {
 
 	G_WavesDefaultSettings();
 	numWaveGroups = 0;
+	memset( &bossGroup, 0, sizeof( bossGroup ) );
 
 	len = trap->FS_Open( WAVES_FILE, &f, FS_READ );
 	if ( !f ) {
@@ -223,7 +254,18 @@ static void G_WavesLoad( void ) {
 				G_WavesParseSettings( &p );
 			}
 			else if ( !Q_stricmp( token, "group" ) ) {
-				G_WavesParseGroup( &p );
+				if ( numWaveGroups >= MAX_WAVE_GROUPS ) {
+					Com_Printf( S_COLOR_YELLOW "%s: too many groups (max %d)\n", WAVES_FILE, MAX_WAVE_GROUPS );
+					SkipBracedSection( &p, 1 );
+					continue;
+				}
+				G_WavesParseGroup( &p, &waveGroups[numWaveGroups] );
+				if ( waveGroups[numWaveGroups].numNpcs ) {
+					numWaveGroups++;
+				}
+			}
+			else if ( !Q_stricmp( token, "boss" ) ) {
+				G_WavesParseGroup( &p, &bossGroup );
 			}
 			else {
 				Com_Printf( S_COLOR_YELLOW "%s: unknown block '%s'\n", WAVES_FILE, token );
@@ -241,7 +283,7 @@ static void G_WavesLoad( void ) {
 		numWaveGroups = 1;
 	}
 
-	Com_Printf( "Waves: %d groups loaded\n", numWaveGroups );
+	Com_Printf( "Waves: %d groups and %d bosses loaded\n", numWaveGroups, bossGroup.numNpcs );
 }
 
 static qboolean G_WavesPlayerAlive( gentity_t *ent ) {
@@ -273,13 +315,18 @@ static gentity_t *G_WavesClosestPlayer( vec3_t origin ) {
 	return best;
 }
 
-static const char *G_WavesPickNpc( void ) {
+static qboolean G_WavesGroupActive( waveGroup_t *group, qboolean checkRounds ) {
+	return ( !checkRounds
+		|| (waves.round >= group->fromRound && (!group->toRound || waves.round <= group->toRound)) );
+}
+
+static const char *G_WavesPickNpc( waveGroup_t *groups, int numGroups, qboolean checkRounds ) {
 	int	total = 0, pick, i, j;
 
-	for ( i = 0; i < numWaveGroups; i++ ) {
-		waveGroup_t *group = &waveGroups[i];
+	for ( i = 0; i < numGroups; i++ ) {
+		waveGroup_t *group = &groups[i];
 
-		if ( waves.round < group->fromRound || (group->toRound && waves.round > group->toRound) ) {
+		if ( !G_WavesGroupActive( group, checkRounds ) ) {
 			continue;
 		}
 		for ( j = 0; j < group->numNpcs; j++ ) {
@@ -291,10 +338,10 @@ static const char *G_WavesPickNpc( void ) {
 	}
 
 	pick = Q_irand( 0, total - 1 );
-	for ( i = 0; i < numWaveGroups; i++ ) {
-		waveGroup_t *group = &waveGroups[i];
+	for ( i = 0; i < numGroups; i++ ) {
+		waveGroup_t *group = &groups[i];
 
-		if ( waves.round < group->fromRound || (group->toRound && waves.round > group->toRound) ) {
+		if ( !G_WavesGroupActive( group, checkRounds ) ) {
 			continue;
 		}
 		for ( j = 0; j < group->numNpcs; j++ ) {
@@ -358,14 +405,48 @@ static qboolean G_WavesPickSpot( vec3_t spot ) {
 	return qfalse;
 }
 
-static void G_WavesSpawnEnemy( void ) {
+static float G_WavesRoundScale( int perRound, int max ) {
+	float scale = 1.0f + perRound * (waves.round - 1) / 100.0f;
+
+	if ( max > 0 && scale > max / 100.0f ) {
+		scale = max / 100.0f;
+	}
+	return scale;
+}
+
+static int G_WavesMaxAlive( void ) {
+	int maxAlive = wavesSettings.maxAliveBase + wavesSettings.maxAlivePerRound * (waves.round - 1);
+
+	if ( maxAlive > wavesSettings.maxAliveMax ) {
+		maxAlive = wavesSettings.maxAliveMax;
+	}
+	return Com_Clampi( 1, MAX_WAVE_ALIVE, maxAlive );
+}
+
+static int G_WavesSpawnInterval( void ) {
+	int interval = wavesSettings.spawnInterval - wavesSettings.spawnIntervalPerRound * (waves.round - 1);
+
+	return ( interval < wavesSettings.spawnIntervalMin ) ? wavesSettings.spawnIntervalMin : interval;
+}
+
+static void G_WavesSpawnEnemy( qboolean boss ) {
 	gentity_t	*npc, *target;
 	const char	*type;
 	vec3_t		spot, dir, angles;
 	float		yaw = 0.0f;
+	waveEnemy_t	*enemy;
 
-	type = G_WavesPickNpc();
-	if ( !type || !G_WavesPickSpot( spot ) ) {
+	if ( boss ) {
+		type = G_WavesPickNpc( &bossGroup, 1, qfalse );
+	}
+	else {
+		type = G_WavesPickNpc( waveGroups, numWaveGroups, qtrue );
+	}
+	if ( !type ) {
+		waves.bossPending = qfalse;
+		return;
+	}
+	if ( !G_WavesPickSpot( spot ) ) {
 		return;
 	}
 
@@ -377,28 +458,58 @@ static void G_WavesSpawnEnemy( void ) {
 	}
 
 	npc = NPC_SpawnTypeAt( spot, yaw, (char *)type, NULL, qfalse, TEAM_RED );
+	if ( boss ) {
+		waves.bossPending = qfalse;
+	}
+	else {
+		waves.toSpawn--;
+	}
 	if ( !npc || !npc->client ) {
 		Com_Printf( S_COLOR_YELLOW "Waves: could not spawn '%s'\n", type );
-		waves.toSpawn--;
 		return;
 	}
 
 	npc->client->playerTeam = NPCTEAM_ENEMY;
 	npc->client->enemyTeam = NPCTEAM_PLAYER;
-	waves.alive[waves.numAlive++] = npc->s.number;
-	waves.toSpawn--;
+
+	enemy = &waves.alive[waves.numAlive++];
+	enemy->num = npc->s.number;
+	enemy->scaled = qfalse;
+	if ( boss ) {
+		waves.numBosses++;
+		enemy->healthScale = wavesSettings.bossHealth * (1.0f + wavesSettings.bossHealthGrowth * (waves.numBosses - 1) / 100.0f);
+		trap->SendServerCommand( -1, va( "cp \"Round %d\nBoss: %s\"", waves.round, type ) );
+	}
+	else {
+		enemy->healthScale = G_WavesRoundScale( wavesSettings.healthPerRound, wavesSettings.healthMax );
+	}
+}
+
+static void G_WavesScaleHealth( gentity_t *npc, float scale ) {
+	int health = (int)(npc->health * scale);
+
+	if ( health < 1 ) {
+		health = 1;
+	}
+	npc->health = npc->client->ps.stats[STAT_HEALTH] = health;
+	npc->client->pers.maxHealth = npc->client->ps.stats[STAT_MAX_HEALTH] = health;
 }
 
 static void G_WavesPruneDead( void ) {
 	int	i = 0;
 
 	while ( i < waves.numAlive ) {
-		gentity_t *npc = &g_entities[waves.alive[i]];
+		waveEnemy_t	*enemy = &waves.alive[i];
+		gentity_t	*npc = &g_entities[enemy->num];
 
 		if ( !npc->inuse || !npc->client
 			|| (npc->think != NPC_Begin && (npc->s.eType != ET_NPC || npc->health <= 0)) ) {
-			waves.alive[i] = waves.alive[--waves.numAlive];
+			*enemy = waves.alive[--waves.numAlive];
 			continue;
+		}
+		if ( !enemy->scaled && npc->think != NPC_Begin ) {
+			G_WavesScaleHealth( npc, enemy->healthScale );
+			enemy->scaled = qtrue;
 		}
 		i++;
 	}
@@ -408,7 +519,7 @@ static void G_WavesAssignEnemies( void ) {
 	int	i;
 
 	for ( i = 0; i < waves.numAlive; i++ ) {
-		gentity_t *npc = &g_entities[waves.alive[i]];
+		gentity_t *npc = &g_entities[waves.alive[i].num];
 		gentity_t *target;
 
 		if ( !npc->NPC || npc->think == NPC_Begin ) {
@@ -491,6 +602,7 @@ static void G_WavesEndGame( void ) {
 static void G_WavesStartRound( void ) {
 	waves.round++;
 	waves.toSpawn = wavesSettings.countBase + wavesSettings.countPerRound * (waves.round - 1);
+	waves.bossPending = ( wavesSettings.bossEvery > 0 && bossGroup.numNpcs && !(waves.round % wavesSettings.bossEvery) );
 	waves.nextSpawnTime = level.time;
 	waves.state = WAVES_ACTIVE;
 	trap->SendServerCommand( -1, va( "cp \"Round %d\"", waves.round ) );
@@ -506,7 +618,7 @@ void G_WavesInit( void ) {
 static void G_WavesUpdateConfigstring( void ) {
 	const char	*s;
 
-	s = va( "%i %i %i %i", waves.round, waves.state, waves.numAlive + waves.toSpawn,
+	s = va( "%i %i %i %i", waves.round, waves.state, waves.numAlive + waves.toSpawn + (waves.bossPending ? 1 : 0),
 		waves.state == WAVES_INTERMISSION ? waves.stateTime : 0 );
 	if ( strcmp( s, wavesConfigstring ) ) {
 		Q_strncpyz( wavesConfigstring, s, sizeof( wavesConfigstring ) );
@@ -543,15 +655,19 @@ void G_WavesRunFrame( void ) {
 			waves.stateTime = level.time + WAVES_DEFEAT_TIME;
 			break;
 		}
-		if ( waves.toSpawn > 0 && waves.numAlive < wavesSettings.maxAlive && level.time >= waves.nextSpawnTime ) {
-			G_WavesSpawnEnemy();
-			waves.nextSpawnTime = level.time + wavesSettings.spawnInterval;
+		if ( waves.bossPending && level.time >= waves.nextSpawnTime ) {
+			G_WavesSpawnEnemy( qtrue );
+			waves.nextSpawnTime = level.time + G_WavesSpawnInterval();
+		}
+		else if ( waves.toSpawn > 0 && waves.numAlive < G_WavesMaxAlive() && level.time >= waves.nextSpawnTime ) {
+			G_WavesSpawnEnemy( qfalse );
+			waves.nextSpawnTime = level.time + G_WavesSpawnInterval();
 		}
 		if ( level.time >= waves.nextEnemyTime ) {
 			G_WavesAssignEnemies();
 			waves.nextEnemyTime = level.time + WAVES_ENEMY_TIME;
 		}
-		if ( waves.toSpawn <= 0 && !waves.numAlive ) {
+		if ( waves.toSpawn <= 0 && !waves.numAlive && !waves.bossPending ) {
 			trap->SendServerCommand( -1, va( "cp \"Round %d complete\"", waves.round ) );
 			G_WavesStartIntermission( wavesSettings.intermission );
 		}
@@ -627,13 +743,28 @@ void G_WavesKillAll( void ) {
 	int	i;
 
 	for ( i = 0; i < waves.numAlive; i++ ) {
-		gentity_t *npc = &g_entities[waves.alive[i]];
+		gentity_t *npc = &g_entities[waves.alive[i].num];
 
 		if ( npc->inuse && npc->health > 0 ) {
 			G_Damage( npc, NULL, NULL, NULL, NULL, npc->health + 100, DAMAGE_NO_PROTECTION, MOD_UNKNOWN );
 		}
 	}
 	waves.toSpawn = 0;
+	waves.bossPending = qfalse;
+}
+
+int G_WavesScaleDamage( gentity_t *attacker, int damage ) {
+	int	i;
+
+	if ( !attacker || attacker->s.eType != ET_NPC ) {
+		return damage;
+	}
+	for ( i = 0; i < waves.numAlive; i++ ) {
+		if ( waves.alive[i].num == attacker->s.number ) {
+			return (int)(damage * G_WavesRoundScale( wavesSettings.damagePerRound, wavesSettings.damageMax ));
+		}
+	}
+	return damage;
 }
 
 void G_WavesSetRound( int round ) {
