@@ -1871,7 +1871,7 @@ qboolean ForceShootLightning( gentity_t *self )
 			}
 
 			//Now check and see if we can actually hit it
-			trap->Trace( &tr, self->client->ps.origin, vec3_origin, vec3_origin, ent_org, self->s.number, MASK_SHOT, qfalse, 0, 0 );
+			trap->Trace( &tr, self->client->ps.origin, vec3_origin, vec3_origin, ent_org, self->s.number, MASK_SOLID, qfalse, 0, 0 );
 			if ( tr.fraction < 1.0f && tr.entityNum != traceEnt->s.number )
 			{//must have clear LOS
 				continue;

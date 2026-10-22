@@ -8235,7 +8235,7 @@ static int CG_ForceLightningTargets( centity_t *attacker, int forceLevel, int *t
 		{
 			continue;
 		}
-		CG_Trace( &tr, attacker->lerpOrigin, NULL, NULL, target->lerpOrigin, attacker->currentState.number, MASK_SHOT );
+		CG_Trace( &tr, attacker->lerpOrigin, NULL, NULL, target->lerpOrigin, attacker->currentState.number, MASK_SOLID );
 		if ( tr.fraction < 1.0f && tr.entityNum != entNum )
 		{
 			continue;
