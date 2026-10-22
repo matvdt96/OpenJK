@@ -952,6 +952,13 @@ void G_FreeEntity( gentity_t *ed ) {
 		return;
 	}
 
+	if ( ed->NPC && ed->NPC->tempGoal && ed->NPC->tempGoal->inuse && ed->NPC->tempGoal->parent == ed ) {
+		gentity_t *tempGoal = ed->NPC->tempGoal;
+
+		ed->NPC->tempGoal = NULL;
+		G_FreeEntity( tempGoal );
+	}
+
 	//rww - this may seem a bit hackish, but unfortunately we have no access
 	//to anything ghoul2-related on the server and thus must send a message
 	//to let the client know he needs to clean up all the g2 stuff for this
