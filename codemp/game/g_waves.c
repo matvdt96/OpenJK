@@ -70,6 +70,7 @@ typedef struct wavesSettings_s {
 static wavesSettings_t	wavesSettings;
 static waveGroup_t		waveGroups[MAX_WAVE_GROUPS];
 static int				numWaveGroups;
+static char				wavesConfigstring[MAX_STRING_CHARS];
 
 static struct {
 	wavesState_t	state;
@@ -498,13 +499,27 @@ static void G_WavesStartRound( void ) {
 void G_WavesInit( void ) {
 	memset( &waves, 0, sizeof( waves ) );
 	waves.state = WAVES_WAITING;
+	wavesConfigstring[0] = '\0';
 	G_WavesLoad();
+}
+
+static void G_WavesUpdateConfigstring( void ) {
+	const char	*s;
+
+	s = va( "%i %i %i %i", waves.round, waves.state, waves.numAlive + waves.toSpawn,
+		waves.state == WAVES_INTERMISSION ? waves.stateTime : 0 );
+	if ( strcmp( s, wavesConfigstring ) ) {
+		Q_strncpyz( wavesConfigstring, s, sizeof( wavesConfigstring ) );
+		trap->SetConfigstring( CS_WAVES, s );
+	}
 }
 
 void G_WavesRunFrame( void ) {
 	if ( level.intermissiontime ) {
 		return;
 	}
+
+	G_WavesUpdateConfigstring();
 
 	G_WavesPruneDead();
 

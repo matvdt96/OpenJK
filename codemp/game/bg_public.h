@@ -119,6 +119,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #define CS_CLIENT_DUELISTS		30		// client numbers for both current duelists. Needed for a number of client-side things.
 #define CS_CLIENT_DUELHEALTHS	31		// nmckenzie: DUEL_HEALTH.  Hopefully adding this cs is safe and good?
 #define CS_GLOBAL_AMBIENT_SET	32
+#define CS_WAVES				33		// Waves gametype: "round state enemies nextRoundTime"
 
 #define CS_LEGACY_FIXES			36
 

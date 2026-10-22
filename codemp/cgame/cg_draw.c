@@ -6299,6 +6299,38 @@ static void CG_ScanForCrosshairEntity( void ) {
 	cg.crosshairClientTime = cg.time;
 }
 
+static void CG_DrawWavesHud( void ) {
+	const float	scale = 0.7f, smallScale = 0.5f;
+	const char	*cs, *line;
+	int			round, state, enemies, nextTime, secs;
+	float		y = 8.0f;
+
+	if ( cgs.gametype != GT_WAVES ) {
+		return;
+	}
+
+	cs = CG_ConfigString( CS_WAVES );
+	if ( sscanf( cs, "%i %i %i %i", &round, &state, &enemies, &nextTime ) != 4 || state == 0 ) {
+		return;
+	}
+
+	if ( state == 1 ) {
+		secs = (nextTime - cg.time + 999) / 1000;
+		line = va( "Round %i in %i", round + 1, secs > 0 ? secs : 0 );
+		CG_Text_Paint( 320 - CG_Text_Width( line, scale, FONT_MEDIUM ) * 0.5f, y, scale, colorWhite, line, 0, 0, ITEM_TEXTSTYLE_SHADOWED, FONT_MEDIUM );
+		return;
+	}
+
+	line = va( "Round %i", round );
+	CG_Text_Paint( 320 - CG_Text_Width( line, scale, FONT_MEDIUM ) * 0.5f, y, scale, colorWhite, line, 0, 0, ITEM_TEXTSTYLE_SHADOWED, FONT_MEDIUM );
+
+	if ( state == 2 ) {
+		y += CG_Text_Height( line, scale, FONT_MEDIUM ) + 4.0f;
+		line = va( "Enemies: %i", enemies );
+		CG_Text_Paint( 320 - CG_Text_Width( line, smallScale, FONT_MEDIUM ) * 0.5f, y, smallScale, colorWhite, line, 0, 0, ITEM_TEXTSTYLE_SHADOWED, FONT_MEDIUM );
+	}
+}
+
 static void CG_DrawNameplates( void ) {
 	static vec4_t	redColor = { 1.0f, 0.25f, 0.25f, 1.0f };
 	static vec4_t	blueColor = { 0.35f, 0.55f, 1.0f, 1.0f };
@@ -8170,6 +8202,7 @@ static void CG_Draw2D( void ) {
 	if ( cg.snap->ps.persistant[PERS_TEAM] == TEAM_SPECTATOR ) {
 		CG_DrawSpectator();
 		CG_DrawNameplates();
+		CG_DrawWavesHud();
 		CG_DrawCrosshair(NULL, 0);
 		CG_DrawCrosshairNames();
 		CG_SaberClashFlare();
@@ -8188,6 +8221,8 @@ static void CG_Draw2D( void ) {
 			CG_DrawAmmoWarning();
 
 			CG_DrawNameplates();
+
+			CG_DrawWavesHud();
 
 			CG_DrawCrosshairNames();
 
