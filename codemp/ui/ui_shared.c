@@ -5879,15 +5879,15 @@ void Item_ListBox_Paint(itemDef_t *item) {
 						DC->setColor( NULL );
 						if (optionalImage3 >= 0)
 						{
-							DC->drawHandlePic(imageStartX - listPtr->elementHeight*3, y+listPtr->elementHeight+2, listPtr->elementHeight, listPtr->elementHeight, optionalImage3);
+							DC->drawHandlePic(x + imageStartX - listPtr->elementHeight*3, y+listPtr->elementHeight+2, listPtr->elementHeight, listPtr->elementHeight, optionalImage3);
 						}
 						if (optionalImage2 >= 0)
 						{
-							DC->drawHandlePic(imageStartX - listPtr->elementHeight*2, y+listPtr->elementHeight+2, listPtr->elementHeight, listPtr->elementHeight, optionalImage2);
+							DC->drawHandlePic(x + imageStartX - listPtr->elementHeight*2, y+listPtr->elementHeight+2, listPtr->elementHeight, listPtr->elementHeight, optionalImage2);
 						}
 						if (optionalImage1 >= 0)
 						{
-							DC->drawHandlePic(imageStartX - listPtr->elementHeight, y+listPtr->elementHeight+2, listPtr->elementHeight, listPtr->elementHeight, optionalImage1);
+							DC->drawHandlePic(x + imageStartX - listPtr->elementHeight, y+listPtr->elementHeight+2, listPtr->elementHeight, listPtr->elementHeight, optionalImage1);
 						}
 					}
 				}
