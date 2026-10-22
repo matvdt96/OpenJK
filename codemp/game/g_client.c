@@ -1341,6 +1341,10 @@ PickTeam
 team_t PickTeam( int ignoreClientNum ) {
 	int		counts[TEAM_NUM_TEAMS];
 
+	if ( level.gametype == GT_WAVES ) {
+		return TEAM_BLUE;
+	}
+
 	counts[TEAM_BLUE] = TeamCount( ignoreClientNum, TEAM_BLUE );
 	counts[TEAM_RED] = TeamCount( ignoreClientNum, TEAM_RED );
 
@@ -3393,6 +3397,7 @@ void ClientSpawn(gentity_t *ent) {
 
 	if ( level.gametype != GT_HOLOCRON
 		&& level.gametype != GT_JEDIMASTER
+		&& level.gametype != GT_WAVES
 		&& !HasSetSaberOnly()
 		&& !AllForceDisabled( g_forcePowerDisable.integer )
 		&& g_jediVmerc.integer )

@@ -166,6 +166,9 @@ int G_GetMapTypeBits(char *type)
 		if( strstr( type, "cty" ) ) {
 			typeBits |= (1 << GT_CTY);
 		}
+		if( strstr( type, "waves" ) ) {
+			typeBits |= (1 << GT_WAVES);
+		}
 	} else {
 		typeBits |= (1 << GT_FFA);
 		typeBits |= (1 << GT_JEDIMASTER);

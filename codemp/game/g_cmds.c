@@ -673,7 +673,9 @@ void SetTeam( gentity_t *ent, char *s ) {
 	} else if ( level.gametype >= GT_TEAM ) {
 		// if running a team game, assign player to one of the teams
 		specState = SPECTATOR_NOT;
-		if ( !Q_stricmp( s, "red" ) || !Q_stricmp( s, "r" ) ) {
+		if ( level.gametype == GT_WAVES ) {
+			team = TEAM_BLUE;
+		} else if ( !Q_stricmp( s, "red" ) || !Q_stricmp( s, "r" ) ) {
 			team = TEAM_RED;
 		} else if ( !Q_stricmp( s, "blue" ) || !Q_stricmp( s, "b" ) ) {
 			team = TEAM_BLUE;
@@ -699,7 +701,7 @@ void SetTeam( gentity_t *ent, char *s ) {
 			//}
 		}
 
-		if ( g_teamForceBalance.integer && !g_jediVmerc.integer ) {
+		if ( g_teamForceBalance.integer && !g_jediVmerc.integer && level.gametype != GT_WAVES ) {
 			int		counts[TEAM_NUM_TEAMS];
 
 			//JAC: Invalid clientNum was being used

@@ -248,6 +248,7 @@ typedef enum {
 	GT_SIEGE,			// siege
 	GT_CTF,				// capture the flag
 	GT_CTY,
+	GT_WAVES,
 	GT_MAX_GAME_TYPE
 } gametype_t;
 

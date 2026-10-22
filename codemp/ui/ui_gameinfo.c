@@ -214,6 +214,9 @@ void UI_LoadArenas( void ) {
 			if( strstr( type, "cty" ) ) {
 				uiInfo.mapList[uiInfo.mapCount].typeBits |= (1 << GT_CTY);
 			}
+			if( strstr( type, "waves" ) ) {
+				uiInfo.mapList[uiInfo.mapCount].typeBits |= (1 << GT_WAVES);
+			}
 		} else {
 			uiInfo.mapList[uiInfo.mapCount].typeBits |= (1 << GT_FFA);
 			uiInfo.mapList[uiInfo.mapCount].typeBits |= (1 << GT_JEDIMASTER);

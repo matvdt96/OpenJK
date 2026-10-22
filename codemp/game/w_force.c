@@ -248,7 +248,7 @@ void WP_InitForcePowers( gentity_t *ent ) {
 	if ( (ent->r.svFlags & SVF_BOT) && botstates[ent->s.number] )
 		Q_strncpyz( forcePowers, botstates[ent->s.number]->forceinfo, sizeof( forcePowers ) );
 
-	if ( g_forceBasedTeams.integer ) {
+	if ( g_forceBasedTeams.integer && level.gametype != GT_WAVES ) {
 		if ( ent->client->sess.sessionTeam == TEAM_RED )
 			warnClient = !(BG_LegalizedForcePowers( forcePowers, sizeof (forcePowers), g_maxForceRank.integer, HasSetSaberOnly(), FORCE_DARKSIDE, level.gametype, fpDisabled ));
 		else if ( ent->client->sess.sessionTeam == TEAM_BLUE )

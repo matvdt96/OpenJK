@@ -515,6 +515,7 @@ static const char *gameTypes[GT_MAX_GAME_TYPE] = {
 	"Siege",
 	"CTF",
 	"CTY",
+	"Waves",
 };
 static const int numGameTypes = ARRAY_LEN( gameTypes );
 
@@ -1576,6 +1577,8 @@ static const char* UI_GetGameTypeName(int gtEnum)
 		return UI_GetStringEdString("MENUS", "CAPTURE_THE_FLAG");//"Capture the Flag";
 	case GT_CTY:
 		return UI_GetStringEdString("MENUS", "CAPTURE_THE_YSALIMARI");//"Capture the Ysalamiri";
+	case GT_WAVES:
+		return "Waves";
 	}
 	return UI_GetStringEdString("MENUS", "SAGA");//"Team FFA";
 }

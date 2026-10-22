@@ -1972,6 +1972,10 @@ void CheckExitRules( void ) {
 		return;
 	}
 
+	if ( level.gametype == GT_WAVES ) {
+		return;
+	}
+
 	/*
 	if (level.gametype == GT_POWERDUEL)
 	{
