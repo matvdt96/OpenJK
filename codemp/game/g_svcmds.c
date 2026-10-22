@@ -484,8 +484,12 @@ void Svcmd_Waves_f( void ) {
 		trap->Argv( 2, cmd, sizeof( cmd ) );
 		G_WavesSetRound( Com_Clampi( 1, 9999, atoi( cmd ) ) );
 	}
+	else if ( !Q_stricmp( cmd, "points" ) && trap->Argc() > 2 ) {
+		trap->Argv( 2, cmd, sizeof( cmd ) );
+		G_WavesGivePoints( atoi( cmd ) );
+	}
 	else if ( cmd[0] ) {
-		Com_Printf( "usage: waves [kill | round <n>]\n" );
+		Com_Printf( "usage: waves [kill | round <n> | points <n>]\n" );
 		return;
 	}
 	G_WavesPrintStatus();

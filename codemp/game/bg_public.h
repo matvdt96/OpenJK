@@ -600,7 +600,8 @@ typedef enum {
 	STAT_ARMOR,
 	STAT_DEAD_YAW,					// look this direction when dead (FIXME: get rid of?)
 	STAT_CLIENTS_READY,				// bit mask of clients wishing to exit the intermission (FIXME: configstring?)
-	STAT_MAX_HEALTH					// health / armor limit, changable by handicap
+	STAT_MAX_HEALTH,				// health / armor limit, changable by handicap
+	STAT_WAVES_ROLE					// Waves gametype role (wavesRole_t)
 } statIndex_t;
 
 
@@ -1778,6 +1779,43 @@ qboolean BG_IsItemSelectable(playerState_t *ps, int item);
 
 qboolean BG_HasYsalamiri(int gametype, playerState_t *ps);
 qboolean BG_CanUseFPNow(int gametype, playerState_t *ps, int time, forcePowers_t power);
+
+// Waves gametype shop, read by the server (purchases) and the ui (shop menu)
+#define WAVES_SHOP_FILE			"ext_data/waves_shop.txt"
+#define MAX_WAVES_SHOP_ITEMS	64
+#define MAX_WAVES_ITEM_LEVELS	3
+
+typedef enum {
+	WAVES_ROLE_NONE,
+	WAVES_ROLE_FORCE,
+	WAVES_ROLE_GUNNER
+} wavesRole_t;
+
+typedef enum {
+	WAVES_ITEM_WEAPON,
+	WAVES_ITEM_AMMO,
+	WAVES_ITEM_CONSUMABLE,
+	WAVES_ITEM_POWER,
+	WAVES_ITEM_MAXHEALTH,
+	WAVES_ITEM_MAXSHIELD,
+	WAVES_ITEM_SHIELD
+} wavesItemType_t;
+
+typedef struct wavesShopItem_s {
+	char	name[32];
+	char	title[64];
+	char	icon[MAX_QPATH];	// shop icon, empty = default for the type
+	int		role;		// WAVES_ROLE_NONE = both roles
+	int		type;		// wavesItemType_t
+	int		param;		// weapon or force power
+	int		amount;		// consumables
+	int		baseLevel;	// level the force user starts with
+	int		numLevels;	// 0 = can be bought again and again at price[0]
+	int		price[MAX_WAVES_ITEM_LEVELS];
+} wavesShopItem_t;
+
+int BG_WavesLoadShop( wavesShopItem_t *items, int maxItems );
+int BG_WavesItemPrice( const wavesShopItem_t *item, int level );
 
 // BG_Alloc room kept for the NPC structures of every entity slot, which are never freed:
 // gclient_t + gNPC_t on the server, clientInfo_t on the client

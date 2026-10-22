@@ -6299,9 +6299,35 @@ static void CG_ScanForCrosshairEntity( void ) {
 	cg.crosshairClientTime = cg.time;
 }
 
+void CG_WavesUpdateUI( void ) {
+	int points;
+
+	if ( cgs.gametype != GT_WAVES || !cg.snap ) {
+		return;
+	}
+
+	points = cg.snap->ps.persistant[PERS_SCORE];
+	if ( !cg.wavesPointsSent || points != cg.wavesPoints ) {
+		cg.wavesPoints = points;
+		cg.wavesPointsSent = qtrue;
+		trap->Cvar_Set( "ui_wavesPoints", va( "%i", points ) );
+	}
+
+	if ( !cg.wavesRolePrompted && cg.snap->ps.clientNum == cg.clientNum
+		&& cg.snap->ps.stats[STAT_WAVES_ROLE] == WAVES_ROLE_NONE ) {
+		cg.wavesRolePrompted = qtrue;
+		trap->SendConsoleCommand( "ui_openmenu waves_role\n" );
+	}
+}
+
+static void CG_DrawWavesHudLine( const char *line, float scale, float *y ) {
+	CG_Text_Paint( 320 - CG_Text_Width( line, scale, FONT_MEDIUM ) * 0.5f, *y, scale, colorWhite, line, 0, 0, ITEM_TEXTSTYLE_SHADOWED, FONT_MEDIUM );
+	*y += CG_Text_Height( line, scale, FONT_MEDIUM ) + 4.0f;
+}
+
 static void CG_DrawWavesHud( void ) {
 	const float	scale = 0.7f, smallScale = 0.5f;
-	const char	*cs, *line;
+	const char	*cs;
 	int			round, state, enemies, nextTime, secs;
 	float		y = 8.0f;
 
@@ -6316,19 +6342,15 @@ static void CG_DrawWavesHud( void ) {
 
 	if ( state == 1 ) {
 		secs = (nextTime - cg.time + 999) / 1000;
-		line = va( "Round %i in %i", round + 1, secs > 0 ? secs : 0 );
-		CG_Text_Paint( 320 - CG_Text_Width( line, scale, FONT_MEDIUM ) * 0.5f, y, scale, colorWhite, line, 0, 0, ITEM_TEXTSTYLE_SHADOWED, FONT_MEDIUM );
-		return;
+		CG_DrawWavesHudLine( va( "Round %i in %i", round + 1, secs > 0 ? secs : 0 ), scale, &y );
 	}
-
-	line = va( "Round %i", round );
-	CG_Text_Paint( 320 - CG_Text_Width( line, scale, FONT_MEDIUM ) * 0.5f, y, scale, colorWhite, line, 0, 0, ITEM_TEXTSTYLE_SHADOWED, FONT_MEDIUM );
-
-	if ( state == 2 ) {
-		y += CG_Text_Height( line, scale, FONT_MEDIUM ) + 4.0f;
-		line = va( "Enemies: %i", enemies );
-		CG_Text_Paint( 320 - CG_Text_Width( line, smallScale, FONT_MEDIUM ) * 0.5f, y, smallScale, colorWhite, line, 0, 0, ITEM_TEXTSTYLE_SHADOWED, FONT_MEDIUM );
+	else {
+		CG_DrawWavesHudLine( va( "Round %i", round ), scale, &y );
+		if ( state == 2 ) {
+			CG_DrawWavesHudLine( va( "Enemies: %i", enemies ), smallScale, &y );
+		}
 	}
+	CG_DrawWavesHudLine( va( "Points: %i", cg.snap->ps.persistant[PERS_SCORE] ), smallScale, &y );
 }
 
 static void CG_DrawNameplates( void ) {

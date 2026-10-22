@@ -3097,6 +3097,153 @@ int BG_ModelCache(const char *modelName, const char *skinName)
 	#endif // _GAME
 }
 
+extern stringID_table_t WPTable[];
+extern stringID_table_t FPTable[];
+
+static int BG_WavesParseId( stringID_table_t *table, const char *name, const char *item ) {
+	int id = GetIDForString( table, name );
+
+	if ( id < 0 ) {
+		Com_Printf( S_COLOR_YELLOW "%s: unknown value '%s' in item '%s'\n", WAVES_SHOP_FILE, name, item );
+	}
+	return id;
+}
+
+static qboolean BG_WavesParseItem( const char **p, wavesShopItem_t *item ) {
+	char	key[MAX_TOKEN_CHARS];
+	char	*token;
+
+	memset( item, 0, sizeof( *item ) );
+	item->param = -1;
+
+	while ( 1 ) {
+		Q_strncpyz( key, COM_ParseExt( p, qtrue ), sizeof( key ) );
+		if ( !key[0] || !Q_stricmp( key, "}" ) ) {
+			break;
+		}
+
+		if ( !Q_stricmp( key, "price" ) ) {
+			while ( item->numLevels < MAX_WAVES_ITEM_LEVELS ) {
+				token = COM_ParseExt( p, qfalse );
+				if ( !token[0] ) {
+					break;
+				}
+				item->price[item->numLevels++] = atoi( token );
+			}
+			continue;
+		}
+
+		token = COM_ParseExt( p, qfalse );
+		if ( !Q_stricmp( key, "name" ) ) {
+			Q_strncpyz( item->name, token, sizeof( item->name ) );
+		}
+		else if ( !Q_stricmp( key, "title" ) ) {
+			Q_strncpyz( item->title, token, sizeof( item->title ) );
+		}
+		else if ( !Q_stricmp( key, "icon" ) ) {
+			Q_strncpyz( item->icon, token, sizeof( item->icon ) );
+		}
+		else if ( !Q_stricmp( key, "role" ) ) {
+			if ( !Q_stricmp( token, "force" ) )			item->role = WAVES_ROLE_FORCE;
+			else if ( !Q_stricmp( token, "gunner" ) )	item->role = WAVES_ROLE_GUNNER;
+			else										item->role = WAVES_ROLE_NONE;
+		}
+		else if ( !Q_stricmp( key, "type" ) ) {
+			if ( !Q_stricmp( token, "weapon" ) )			item->type = WAVES_ITEM_WEAPON;
+			else if ( !Q_stricmp( token, "ammo" ) )			item->type = WAVES_ITEM_AMMO;
+			else if ( !Q_stricmp( token, "consumable" ) )	item->type = WAVES_ITEM_CONSUMABLE;
+			else if ( !Q_stricmp( token, "power" ) )		item->type = WAVES_ITEM_POWER;
+			else if ( !Q_stricmp( token, "maxhealth" ) )	item->type = WAVES_ITEM_MAXHEALTH;
+			else if ( !Q_stricmp( token, "maxshield" ) )	item->type = WAVES_ITEM_MAXSHIELD;
+			else if ( !Q_stricmp( token, "shield" ) )		item->type = WAVES_ITEM_SHIELD;
+			else Com_Printf( S_COLOR_YELLOW "%s: unknown type '%s'\n", WAVES_SHOP_FILE, token );
+		}
+		else if ( !Q_stricmp( key, "weapon" ) ) {
+			item->param = BG_WavesParseId( WPTable, token, item->name );
+		}
+		else if ( !Q_stricmp( key, "power" ) ) {
+			item->param = BG_WavesParseId( FPTable, token, item->name );
+		}
+		else if ( !Q_stricmp( key, "amount" ) ) {
+			item->amount = atoi( token );
+		}
+		else if ( !Q_stricmp( key, "base" ) ) {
+			item->baseLevel = atoi( token );
+		}
+		else {
+			Com_Printf( S_COLOR_YELLOW "%s: unknown key '%s'\n", WAVES_SHOP_FILE, key );
+		}
+	}
+
+	if ( !item->name[0] || !item->numLevels ) {
+		Com_Printf( S_COLOR_YELLOW "%s: item without name or price skipped\n", WAVES_SHOP_FILE );
+		return qfalse;
+	}
+	if ( (item->type == WAVES_ITEM_WEAPON || item->type == WAVES_ITEM_CONSUMABLE || item->type == WAVES_ITEM_POWER) && item->param < 0 ) {
+		return qfalse;
+	}
+	if ( !item->title[0] ) {
+		Q_strncpyz( item->title, item->name, sizeof( item->title ) );
+	}
+	if ( item->type == WAVES_ITEM_AMMO || item->type == WAVES_ITEM_CONSUMABLE || item->type == WAVES_ITEM_SHIELD ) {
+		item->numLevels = 0;
+	}
+	return qtrue;
+}
+
+int BG_WavesLoadShop( wavesShopItem_t *items, int maxItems ) {
+	static char		buf[32768];
+	fileHandle_t	f;
+	const char		*p;
+	char			*token;
+	int				len, count = 0;
+
+	len = trap->FS_Open( WAVES_SHOP_FILE, &f, FS_READ );
+	if ( !f ) {
+		return 0;
+	}
+	if ( len >= (int)sizeof( buf ) ) {
+		Com_Printf( S_COLOR_YELLOW "%s is too big\n", WAVES_SHOP_FILE );
+		trap->FS_Close( f );
+		return 0;
+	}
+	trap->FS_Read( buf, len, f );
+	buf[len] = 0;
+	trap->FS_Close( f );
+
+	p = buf;
+	COM_BeginParseSession( WAVES_SHOP_FILE );
+	while ( count < maxItems ) {
+		token = COM_ParseExt( &p, qtrue );
+		if ( !token[0] ) {
+			break;
+		}
+		if ( Q_stricmp( token, "item" ) ) {
+			Com_Printf( S_COLOR_YELLOW "%s: unknown block '%s'\n", WAVES_SHOP_FILE, token );
+			break;
+		}
+		token = COM_ParseExt( &p, qtrue );
+		if ( Q_stricmp( token, "{" ) ) {
+			Com_Printf( S_COLOR_YELLOW "%s: expected '{'\n", WAVES_SHOP_FILE );
+			break;
+		}
+		if ( BG_WavesParseItem( &p, &items[count] ) ) {
+			count++;
+		}
+	}
+	return count;
+}
+
+int BG_WavesItemPrice( const wavesShopItem_t *item, int level ) {
+	if ( !item->numLevels ) {
+		return item->price[0];
+	}
+	if ( level >= item->numLevels ) {
+		return -1;
+	}
+	return item->price[level];
+}
+
 #if defined(_GAME)
 	#define MAX_POOL_SIZE	(3000000 + MAX_GENTITIES * BG_POOL_NPC_SLOT_GAME) //1024000
 #elif defined(_CGAME) //don't need as much for cgame stuff. 2mb will be fine.

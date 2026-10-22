@@ -502,6 +502,13 @@ typedef struct clientPersistant_s {
 	int			vote, teamvote; // 0 = none, 1 = yes, 2 = no
 
 	char		guid[33];
+
+	struct {
+		int		role;							// wavesRole_t
+		int		levels[MAX_WAVES_SHOP_ITEMS];	// shop items bought, by level
+		int		consumables[AMMO_MAX];			// consumable ammo kept across deaths
+		qboolean	joined;						// has spawned in the game, role is locked
+	} waves;
 } clientPersistant_t;
 
 typedef struct renderInfo_s
@@ -1380,6 +1387,13 @@ qboolean G_WavesHoldSpawn( gentity_t *ent );
 void G_WavesMakeSpectator( gentity_t *ent );
 qboolean G_WavesSpawnNearTeammate( gentity_t *ent, vec3_t origin, vec3_t angles );
 int G_WavesScaleDamage( gentity_t *attacker, int damage );
+void G_WavesEnemyDamaged( gentity_t *targ, gentity_t *attacker );
+void G_WavesEnemyKilled( gentity_t *self, gentity_t *attacker );
+void G_WavesApplyLoadout( gentity_t *ent );
+void G_WavesSaveConsumables( gentity_t *ent );
+void G_WavesSetRole( gentity_t *ent, const char *name );
+void G_WavesBuy( gentity_t *ent, const char *name );
+void G_WavesGivePoints( int points );
 
 //
 // g_mem.c

@@ -465,6 +465,9 @@ void AddScore( gentity_t *ent, vec3_t origin, int score )
 	if ( !ent->client ) {
 		return;
 	}
+	if ( level.gametype == GT_WAVES ) {
+		return;
+	}
 	// no scoring during pre-match warmup
 	if ( level.warmupTime ) {
 		return;
@@ -2455,6 +2458,10 @@ extern void RunEmplacedWeapon( gentity_t *ent, usercmd_t **ucmd );
 		obit = "<bad obituary>";
 	} else {
 		obit = modNames[ meansOfDeath ];
+	}
+
+	if ( level.gametype == GT_WAVES ) {
+		G_WavesEnemyKilled( self, attacker );
 	}
 
 	// log the victim and attacker's names with the method of death
@@ -4598,7 +4605,8 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 	if ( attacker->client
 		&& attacker != targ
 		&& attacker->s.eType == ET_PLAYER
-		&& level.gametype != GT_SIEGE )
+		&& level.gametype != GT_SIEGE
+		&& level.gametype != GT_WAVES )
 	{
 		max = attacker->client->ps.stats[STAT_MAX_HEALTH];
 		damage = damage * max / 100;
@@ -5401,6 +5409,10 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker, vec3_
 
 		if ( targ->client ) {
 			targ->client->ps.stats[STAT_HEALTH] = targ->health;
+		}
+
+		if ( level.gametype == GT_WAVES ) {
+			G_WavesEnemyDamaged( targ, attacker );
 		}
 
 		if ( !(dflags & DAMAGE_NO_PROTECTION) )

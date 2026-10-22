@@ -3418,6 +3418,20 @@ int cmdcmp( const void *a, const void *b ) {
 	return Q_stricmp( (const char *)a, ((command_t*)b)->name );
 }
 
+void Cmd_WavesBuy_f( gentity_t *ent ) {
+	char	arg[MAX_TOKEN_CHARS];
+
+	trap->Argv( 1, arg, sizeof( arg ) );
+	G_WavesBuy( ent, arg );
+}
+
+void Cmd_WavesSetRole_f( gentity_t *ent ) {
+	char	arg[MAX_TOKEN_CHARS];
+
+	trap->Argv( 1, arg, sizeof( arg ) );
+	G_WavesSetRole( ent, arg );
+}
+
 command_t commands[] = {
 	{ "addbot",				Cmd_AddBot_f,				0 },
 	{ "callteamvote",		Cmd_CallTeamVote_f,			CMD_NOINTERMISSION },
@@ -3459,6 +3473,8 @@ command_t commands[] = {
 	{ "t_use",				Cmd_TargetUse_f,			CMD_CHEAT|CMD_ALIVE },
 	{ "voice_cmd",			Cmd_VoiceCommand_f,			CMD_NOINTERMISSION },
 	{ "vote",				Cmd_Vote_f,					CMD_NOINTERMISSION },
+	{ "waves_buy",			Cmd_WavesBuy_f,				CMD_NOINTERMISSION },
+	{ "waves_setrole",		Cmd_WavesSetRole_f,			CMD_NOINTERMISSION },
 	{ "where",				Cmd_Where_f,				CMD_NOINTERMISSION },
 };
 static const size_t numCommands = ARRAY_LEN( commands );

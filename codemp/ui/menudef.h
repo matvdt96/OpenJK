@@ -131,6 +131,8 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #define FEEDER_MOVES_TITLES					0x2a			// move titles for the data pad moves screen
 #define FEEDER_SABER_SINGLE_INFO			0x2b			// saber single
 #define FEEDER_SABER_STAFF_INFO				0x2c			// saber staff
+#define FEEDER_WAVES_SHOP					0x2d			// Waves gametype shop
+#define FEEDER_WAVES_CHARACTERS				0x2e			// Waves gametype characters of the role
 
 
 // Xbox specific, hope no one minds

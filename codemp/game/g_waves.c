@@ -31,11 +31,20 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #define WAVES_REVIVE_MIN_DIST	64
 #define WAVES_REVIVE_MAX_DIST	400
 #define WAVES_SPECTATE_FOREVER	0x7fffffff
+#define WAVES_HIT_POINTS		10
+#define WAVES_HIT_INTERVAL		200
+#define WAVES_KILL_POINTS		60
+#define WAVES_BOSS_POINTS		500
+#define WAVES_ROUND_POINTS		100
+#define WAVES_HEALTH_STEP		25
+#define WAVES_SHIELD_STEP		25
+#define WAVES_BASE_SHIELD		100
 
 extern gentity_t *NPC_SpawnTypeAt( vec3_t origin, float yaw, char *npc_type, char *targetname, qboolean isVehicle, team_t teamowner );
 extern void NPC_Begin( gentity_t *ent );
 extern void G_SetEnemy( gentity_t *self, gentity_t *enemy );
 extern void ClientRespawn( gentity_t *ent );
+extern void CalculateRanks( void );
 
 typedef struct waveNpc_s {
 	char	type[MAX_QPATH];
@@ -82,6 +91,7 @@ typedef struct waveEnemy_s {
 	int			num;
 	float		healthScale;
 	qboolean	scaled;
+	qboolean	boss;
 } waveEnemy_t;
 
 static wavesSettings_t	wavesSettings;
@@ -89,6 +99,9 @@ static waveGroup_t		waveGroups[MAX_WAVE_GROUPS];
 static int				numWaveGroups;
 static waveGroup_t		bossGroup;
 static char				wavesConfigstring[MAX_STRING_CHARS];
+static wavesShopItem_t	shopItems[MAX_WAVES_SHOP_ITEMS];
+static int				numShopItems;
+static int				wavesHitTime[MAX_CLIENTS][MAX_GENTITIES];
 
 static struct {
 	wavesState_t	state;
@@ -475,6 +488,7 @@ static void G_WavesSpawnEnemy( qboolean boss ) {
 	enemy = &waves.alive[waves.numAlive++];
 	enemy->num = npc->s.number;
 	enemy->scaled = qfalse;
+	enemy->boss = boss;
 	if ( boss ) {
 		waves.numBosses++;
 		enemy->healthScale = wavesSettings.bossHealth * (1.0f + wavesSettings.bossHealthGrowth * (waves.numBosses - 1) / 100.0f);
@@ -608,11 +622,386 @@ static void G_WavesStartRound( void ) {
 	trap->SendServerCommand( -1, va( "cp \"Round %d\"", waves.round ) );
 }
 
+static void G_WavesAddPoints( gentity_t *ent, int points ) {
+	ent->client->ps.persistant[PERS_SCORE] += points;
+	CalculateRanks();
+}
+
+static void G_WavesRoundBonus( void ) {
+	int	i;
+
+	for ( i = 0; i < level.maxclients; i++ ) {
+		if ( G_WavesPlayerAlive( &g_entities[i] ) ) {
+			G_WavesAddPoints( &g_entities[i], WAVES_ROUND_POINTS );
+		}
+	}
+}
+
+static waveEnemy_t *G_WavesFindEnemy( gentity_t *ent ) {
+	int	i;
+
+	for ( i = 0; i < waves.numAlive; i++ ) {
+		if ( waves.alive[i].num == ent->s.number ) {
+			return &waves.alive[i];
+		}
+	}
+	return NULL;
+}
+
+void G_WavesEnemyDamaged( gentity_t *targ, gentity_t *attacker ) {
+	int	*hitTime;
+
+	if ( !attacker || !attacker->client || attacker->s.number >= MAX_CLIENTS || !G_WavesFindEnemy( targ ) ) {
+		return;
+	}
+	hitTime = &wavesHitTime[attacker->s.number][targ->s.number];
+	if ( level.time - *hitTime < WAVES_HIT_INTERVAL && *hitTime <= level.time ) {
+		return;
+	}
+	*hitTime = level.time;
+	G_WavesAddPoints( attacker, WAVES_HIT_POINTS );
+}
+
+void G_WavesEnemyKilled( gentity_t *self, gentity_t *attacker ) {
+	waveEnemy_t	*enemy;
+
+	if ( !attacker || !attacker->client || attacker->s.number >= MAX_CLIENTS ) {
+		return;
+	}
+	enemy = G_WavesFindEnemy( self );
+	if ( enemy ) {
+		G_WavesAddPoints( attacker, enemy->boss ? WAVES_BOSS_POINTS : WAVES_KILL_POINTS );
+	}
+}
+
+void G_WavesGivePoints( int points ) {
+	int	i;
+
+	for ( i = 0; i < level.maxclients; i++ ) {
+		gentity_t *ent = &g_entities[i];
+
+		if ( ent->inuse && ent->client && ent->client->pers.connected == CON_CONNECTED
+			&& ent->client->sess.sessionTeam == TEAM_BLUE ) {
+			G_WavesAddPoints( ent, points );
+		}
+	}
+}
+
+static int G_WavesItemLevel( gentity_t *ent, int index ) {
+	const wavesShopItem_t	*item = &shopItems[index];
+	int						itemLevel = ent->client->pers.waves.levels[index];
+
+	if ( item->type == WAVES_ITEM_POWER && ent->client->pers.waves.role == WAVES_ROLE_FORCE && itemLevel < item->baseLevel ) {
+		itemLevel = item->baseLevel;
+	}
+	return itemLevel;
+}
+
+static int G_WavesTotalLevels( gentity_t *ent, int type ) {
+	int	i, total = 0;
+
+	for ( i = 0; i < numShopItems; i++ ) {
+		if ( shopItems[i].type == type ) {
+			total += ent->client->pers.waves.levels[i];
+		}
+	}
+	return total;
+}
+
+static int G_WavesMaxHealth( gentity_t *ent ) {
+	return 100 + WAVES_HEALTH_STEP * G_WavesTotalLevels( ent, WAVES_ITEM_MAXHEALTH );
+}
+
+static int G_WavesMaxShield( gentity_t *ent ) {
+	return WAVES_BASE_SHIELD + WAVES_SHIELD_STEP * G_WavesTotalLevels( ent, WAVES_ITEM_MAXSHIELD );
+}
+
+static void G_WavesSendInventory( gentity_t *ent ) {
+	char	buf[MAX_STRING_CHARS];
+	int		i;
+
+	Com_sprintf( buf, sizeof( buf ), "wavesinv %i", ent->client->pers.waves.role );
+	for ( i = 0; i < numShopItems; i++ ) {
+		Q_strcat( buf, sizeof( buf ), va( " %i", G_WavesItemLevel( ent, i ) ) );
+	}
+	trap->SendServerCommand( ent->s.number, buf );
+}
+
+static void G_WavesGiveWeapon( gentity_t *ent, int weapon ) {
+	gclient_t	*client = ent->client;
+	int			ammo = weaponData[weapon].ammoIndex;
+
+	client->ps.stats[STAT_WEAPONS] |= (1 << weapon);
+	if ( ammo > AMMO_NONE && ammo < AMMO_MAX ) {
+		client->ps.ammo[ammo] = ammoData[ammo].max;
+	}
+}
+
+static void G_WavesSetPower( gentity_t *ent, int power, int itemLevel ) {
+	playerState_t *ps = &ent->client->ps;
+
+	ps->fd.forcePowerLevel[power] = ps->fd.forcePowerBaseLevel[power] = itemLevel;
+	if ( itemLevel > 0 ) {
+		ps->fd.forcePowersKnown |= (1 << power);
+	}
+	else {
+		ps->fd.forcePowersKnown &= ~(1 << power);
+	}
+}
+
+static void G_WavesClampSaberStyle( gentity_t *ent ) {
+	playerState_t	*ps = &ent->client->ps;
+	int				maxStyle = ps->fd.forcePowerLevel[FP_SABER_OFFENSE];
+
+	if ( maxStyle < FORCE_LEVEL_1 ) {
+		maxStyle = FORCE_LEVEL_1;
+	}
+	if ( ps->fd.saberAnimLevel > maxStyle ) {
+		ps->fd.saberAnimLevel = maxStyle;
+	}
+	if ( ps->fd.saberDrawAnimLevel > maxStyle ) {
+		ps->fd.saberDrawAnimLevel = maxStyle;
+	}
+	if ( ps->fd.saberAnimLevelBase > maxStyle ) {
+		ps->fd.saberAnimLevelBase = maxStyle;
+	}
+}
+
+void G_WavesApplyLoadout( gentity_t *ent ) {
+	gclient_t	*client = ent->client;
+	int			role = client->pers.waves.role ? client->pers.waves.role : WAVES_ROLE_FORCE;
+	int			i, maxHealth, maxShield;
+
+	if ( level.gametype != GT_WAVES || client->sess.sessionTeam != TEAM_BLUE ) {
+		return;
+	}
+
+	client->ps.stats[STAT_WAVES_ROLE] = client->pers.waves.role;
+	client->pers.waves.joined = qtrue;
+
+	for ( i = 0; i < NUM_FORCE_POWERS; i++ ) {
+		G_WavesSetPower( ent, i, 0 );
+	}
+	memset( client->ps.ammo, 0, sizeof( client->ps.ammo ) );
+
+	if ( role == WAVES_ROLE_FORCE ) {
+		client->ps.stats[STAT_WEAPONS] = (1 << WP_SABER) | (1 << WP_MELEE);
+		client->ps.weapon = WP_SABER;
+		for ( i = 0; i < numShopItems; i++ ) {
+			if ( shopItems[i].type == WAVES_ITEM_POWER ) {
+				G_WavesSetPower( ent, shopItems[i].param, G_WavesItemLevel( ent, i ) );
+			}
+		}
+		G_WavesClampSaberStyle( ent );
+	}
+	else {
+		client->ps.stats[STAT_WEAPONS] = (1 << WP_BRYAR_PISTOL) | (1 << WP_MELEE);
+		client->ps.weapon = WP_BRYAR_PISTOL;
+		client->ps.ammo[weaponData[WP_BRYAR_PISTOL].ammoIndex] = ammoData[weaponData[WP_BRYAR_PISTOL].ammoIndex].max;
+		for ( i = 0; i < numShopItems; i++ ) {
+			if ( shopItems[i].type == WAVES_ITEM_WEAPON && client->pers.waves.levels[i] ) {
+				G_WavesGiveWeapon( ent, shopItems[i].param );
+			}
+		}
+		for ( i = 0; i < numShopItems; i++ ) {
+			if ( shopItems[i].type == WAVES_ITEM_CONSUMABLE ) {
+				int ammo = weaponData[shopItems[i].param].ammoIndex;
+
+				if ( client->pers.waves.consumables[ammo] > 0 ) {
+					client->ps.stats[STAT_WEAPONS] |= (1 << shopItems[i].param);
+					client->ps.ammo[ammo] = client->pers.waves.consumables[ammo];
+				}
+			}
+		}
+	}
+
+	maxHealth = G_WavesMaxHealth( ent );
+	maxShield = G_WavesMaxShield( ent );
+	client->pers.maxHealth = client->ps.stats[STAT_MAX_HEALTH] = maxHealth;
+	ent->health = client->ps.stats[STAT_HEALTH] = maxHealth;
+	if ( client->ps.stats[STAT_ARMOR] > maxShield ) {
+		client->ps.stats[STAT_ARMOR] = maxShield;
+	}
+
+	G_WavesSendInventory( ent );
+}
+
+void G_WavesSaveConsumables( gentity_t *ent ) {
+	int	i;
+
+	if ( level.gametype != GT_WAVES || !ent->client ) {
+		return;
+	}
+	for ( i = 0; i < numShopItems; i++ ) {
+		if ( shopItems[i].type == WAVES_ITEM_CONSUMABLE ) {
+			int ammo = weaponData[shopItems[i].param].ammoIndex;
+
+			ent->client->pers.waves.consumables[ammo] = ent->client->ps.ammo[ammo];
+		}
+	}
+}
+
+static qboolean G_WavesCanChangeRole( gentity_t *ent ) {
+	return ( !ent->client->pers.waves.role || !ent->client->pers.waves.joined );
+}
+
+void G_WavesSetRole( gentity_t *ent, const char *name ) {
+	int	role;
+
+	if ( level.gametype != GT_WAVES || !ent->client ) {
+		return;
+	}
+	if ( !Q_stricmp( name, "force" ) ) {
+		role = WAVES_ROLE_FORCE;
+	}
+	else if ( !Q_stricmp( name, "gunner" ) ) {
+		role = WAVES_ROLE_GUNNER;
+	}
+	else {
+		trap->SendServerCommand( ent->s.number, "print \"usage: waves_setrole force | gunner\n\"" );
+		return;
+	}
+	if ( role == ent->client->pers.waves.role ) {
+		return;
+	}
+	if ( !G_WavesCanChangeRole( ent ) ) {
+		trap->SendServerCommand( ent->s.number, "print \"You can't change role after joining the game\n\"" );
+		return;
+	}
+
+	G_WavesSaveConsumables( ent );
+	ent->client->pers.waves.role = role;
+	if ( G_WavesPlayerAlive( ent ) ) {
+		G_WavesApplyLoadout( ent );
+	}
+	else {
+		ent->client->ps.stats[STAT_WAVES_ROLE] = role;
+		G_WavesSendInventory( ent );
+	}
+}
+
+static void G_WavesApplyItem( gentity_t *ent, const wavesShopItem_t *item, int itemLevel ) {
+	gclient_t	*client = ent->client;
+	int			ammo, maxShield;
+
+	switch ( item->type ) {
+	case WAVES_ITEM_WEAPON:
+		G_WavesGiveWeapon( ent, item->param );
+		break;
+	case WAVES_ITEM_AMMO:
+		for ( ammo = AMMO_NONE + 1; ammo < AMMO_MAX; ammo++ ) {
+			int w;
+
+			for ( w = WP_NONE + 1; w < WP_NUM_WEAPONS; w++ ) {
+				if ( (client->ps.stats[STAT_WEAPONS] & (1 << w)) && weaponData[w].ammoIndex == ammo
+					&& w != WP_THERMAL && w != WP_TRIP_MINE && w != WP_DET_PACK ) {
+					client->ps.ammo[ammo] = ammoData[ammo].max;
+					break;
+				}
+			}
+		}
+		break;
+	case WAVES_ITEM_CONSUMABLE:
+		ammo = weaponData[item->param].ammoIndex;
+		client->ps.stats[STAT_WEAPONS] |= (1 << item->param);
+		client->ps.ammo[ammo] += item->amount;
+		if ( client->ps.ammo[ammo] > ammoData[ammo].max ) {
+			client->ps.ammo[ammo] = ammoData[ammo].max;
+		}
+		client->pers.waves.consumables[ammo] = client->ps.ammo[ammo];
+		break;
+	case WAVES_ITEM_POWER:
+		G_WavesSetPower( ent, item->param, itemLevel );
+		break;
+	case WAVES_ITEM_MAXHEALTH:
+		client->pers.maxHealth = client->ps.stats[STAT_MAX_HEALTH] = G_WavesMaxHealth( ent );
+		ent->health += WAVES_HEALTH_STEP;
+		if ( ent->health > client->ps.stats[STAT_MAX_HEALTH] ) {
+			ent->health = client->ps.stats[STAT_MAX_HEALTH];
+		}
+		client->ps.stats[STAT_HEALTH] = ent->health;
+		break;
+	case WAVES_ITEM_MAXSHIELD:
+		client->ps.stats[STAT_ARMOR] += WAVES_SHIELD_STEP;
+		maxShield = G_WavesMaxShield( ent );
+		if ( client->ps.stats[STAT_ARMOR] > maxShield ) {
+			client->ps.stats[STAT_ARMOR] = maxShield;
+		}
+		break;
+	case WAVES_ITEM_SHIELD:
+		client->ps.stats[STAT_ARMOR] = G_WavesMaxShield( ent );
+		break;
+	}
+}
+
+void G_WavesBuy( gentity_t *ent, const char *name ) {
+	gclient_t				*client = ent->client;
+	const wavesShopItem_t	*item = NULL;
+	int						i, index = -1, itemLevel, price, role;
+
+	if ( level.gametype != GT_WAVES || !client || client->sess.sessionTeam != TEAM_BLUE ) {
+		return;
+	}
+	for ( i = 0; i < numShopItems; i++ ) {
+		if ( !Q_stricmp( shopItems[i].name, name ) ) {
+			item = &shopItems[i];
+			index = i;
+			break;
+		}
+	}
+	if ( !item ) {
+		trap->SendServerCommand( ent->s.number, va( "print \"Unknown item '%s'\n\"", name ) );
+		return;
+	}
+
+	role = client->pers.waves.role;
+	if ( item->role != WAVES_ROLE_NONE && item->role != role ) {
+		trap->SendServerCommand( ent->s.number, va( "print \"%s is not for your role\n\"", item->title ) );
+		return;
+	}
+	if ( item->type == WAVES_ITEM_SHIELD && client->ps.stats[STAT_ARMOR] >= G_WavesMaxShield( ent ) ) {
+		trap->SendServerCommand( ent->s.number, "print \"Your shield is already full\n\"" );
+		return;
+	}
+
+	itemLevel = G_WavesItemLevel( ent, index );
+	price = BG_WavesItemPrice( item, itemLevel );
+	if ( price < 0 ) {
+		trap->SendServerCommand( ent->s.number, va( "print \"%s is already at its best\n\"", item->title ) );
+		return;
+	}
+	if ( client->ps.persistant[PERS_SCORE] < price ) {
+		trap->SendServerCommand( ent->s.number, va( "print \"Not enough points for %s (%i)\n\"", item->title, price ) );
+		return;
+	}
+
+	G_WavesAddPoints( ent, -price );
+	if ( item->numLevels ) {
+		client->pers.waves.levels[index] = itemLevel + 1;
+	}
+	if ( item->type == WAVES_ITEM_CONSUMABLE && !G_WavesPlayerAlive( ent ) ) {
+		int ammo = weaponData[item->param].ammoIndex;
+
+		client->pers.waves.consumables[ammo] += item->amount;
+		if ( client->pers.waves.consumables[ammo] > ammoData[ammo].max ) {
+			client->pers.waves.consumables[ammo] = ammoData[ammo].max;
+		}
+	}
+	else if ( G_WavesPlayerAlive( ent ) ) {
+		G_WavesApplyItem( ent, item, itemLevel + 1 );
+	}
+	G_WavesSendInventory( ent );
+	trap->SendServerCommand( ent->s.number, va( "print \"Bought %s\n\"", item->title ) );
+}
+
 void G_WavesInit( void ) {
 	memset( &waves, 0, sizeof( waves ) );
 	waves.state = WAVES_WAITING;
 	wavesConfigstring[0] = '\0';
+	memset( wavesHitTime, 0, sizeof( wavesHitTime ) );
 	G_WavesLoad();
+	numShopItems = BG_WavesLoadShop( shopItems, MAX_WAVES_SHOP_ITEMS );
+	Com_Printf( "Waves: %d shop items loaded\n", numShopItems );
 }
 
 static void G_WavesUpdateConfigstring( void ) {
@@ -668,6 +1057,7 @@ void G_WavesRunFrame( void ) {
 			waves.nextEnemyTime = level.time + WAVES_ENEMY_TIME;
 		}
 		if ( waves.toSpawn <= 0 && !waves.numAlive && !waves.bossPending ) {
+			G_WavesRoundBonus();
 			trap->SendServerCommand( -1, va( "cp \"Round %d complete\"", waves.round ) );
 			G_WavesStartIntermission( wavesSettings.intermission );
 		}

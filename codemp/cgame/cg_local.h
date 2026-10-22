@@ -1033,6 +1033,9 @@ Ghoul2 Insert End
 	int numSpawnVarChars;
 	char spawnVarChars[MAX_SPAWN_VARS_CHARS];
 
+	qboolean	wavesRolePrompted;
+	int			wavesPoints;
+	qboolean	wavesPointsSent;
 } cg_t;
 
 #define MAX_TICS	14
@@ -1764,6 +1767,7 @@ void CG_DrawHead( float x, float y, float w, float h, int clientNum, vec3_t head
 void CG_DrawActive( stereoFrame_t stereoView );
 const char *CG_ForcePowerName( int power );
 void CG_ForceRepulseDust( centity_t *cent, float charge, float radius );
+void CG_WavesUpdateUI( void );
 void CG_DrawFlagModel( float x, float y, float w, float h, int team, qboolean force2D );
 void CG_DrawTeamBackground( int x, int y, int w, int h, float alpha, int team );
 void CG_OwnerDraw(float x, float y, float w, float h, float text_x, float text_y, int ownerDraw, int ownerDrawFlags, int align, float special, float scale, vec4_t color, qhandle_t shader, int textStyle,int font);

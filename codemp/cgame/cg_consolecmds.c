@@ -316,6 +316,24 @@ int cmdcmp( const void *a, const void *b ) {
 	return Q_stricmp( (const char *)a, ((consoleCommand_t*)b)->cmd );
 }
 
+static void CG_WavesRoleMenu_f( void ) {
+	if ( cgs.gametype == GT_WAVES && cgs.clientinfo[cg.clientNum].team == TEAM_SPECTATOR ) {
+		trap->SendConsoleCommand( "ui_openmenu waves_role\n" );
+	}
+}
+
+static void CG_WavesCharacterMenu_f( void ) {
+	if ( cgs.gametype == GT_WAVES && cgs.clientinfo[cg.clientNum].team == TEAM_SPECTATOR ) {
+		trap->SendConsoleCommand( "ui_openmenu waves_character\n" );
+	}
+}
+
+static void CG_WavesShopMenu_f( void ) {
+	if ( cgs.gametype == GT_WAVES ) {
+		trap->SendConsoleCommand( "ui_openmenu waves_shop\n" );
+	}
+}
+
 static consoleCommand_t	commands[] = {
 	{ "+force_repulse",				CG_ForceRepulseDown_f },
 	{ "+force_throw",				CG_ForceThrowDown_f },
@@ -346,6 +364,9 @@ static consoleCommand_t	commands[] = {
 	{ "testgun",					CG_TestGun_f },
 	{ "testmodel",					CG_TestModel_f },
 	{ "viewpos",					CG_Viewpos_f },
+	{ "waves_character",			CG_WavesCharacterMenu_f },
+	{ "waves_role",					CG_WavesRoleMenu_f },
+	{ "waves_shop",					CG_WavesShopMenu_f },
 	{ "weapnext",					CG_NextWeapon_f },
 	{ "weapon",						CG_Weapon_f },
 	{ "weaponclean",				CG_WeaponClean_f },
@@ -403,6 +424,8 @@ static const char *gcmds[] = {
 	"tell",
 	"voice_cmd",
 	"vote",
+	"waves_buy",
+	"waves_setrole",
 	"where",
 	"zoom"
 };

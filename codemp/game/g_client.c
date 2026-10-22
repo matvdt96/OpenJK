@@ -1220,6 +1220,7 @@ ClientRespawn
 */
 void SiegeRespawn(gentity_t *ent);
 void ClientRespawn( gentity_t *ent ) {
+	G_WavesSaveConsumables( ent );
 	MaintainBodyQueue(ent);
 
 	if ( G_WavesHoldSpawn( ent ) ) {
@@ -3853,6 +3854,8 @@ void ClientSpawn(gentity_t *ent) {
 	//rww - make sure client has a valid icarus instance
 	trap->ICARUS_FreeEnt( (sharedEntity_t *)ent );
 	trap->ICARUS_InitEnt( (sharedEntity_t *)ent );
+
+	G_WavesApplyLoadout( ent );
 
 	if ( G_WavesHoldSpawn( ent ) ) {
 		G_WavesMakeSpectator( ent );

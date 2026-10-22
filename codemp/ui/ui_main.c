@@ -1473,6 +1473,272 @@ void UI_LoadMenus(const char *menuFile, qboolean reset) {
 	trap->PC_RemoveAllGlobalDefines ( );
 }
 
+#define WAVES_CHARACTERS_FILE	"ext_data/waves_characters.txt"
+#define MAX_WAVES_CHARACTERS	64
+
+typedef struct uiWavesCharacter_s {
+	char		model[MAX_QPATH];
+	qhandle_t	icon;
+} uiWavesCharacter_t;
+
+static wavesShopItem_t		uiWavesShop[MAX_WAVES_SHOP_ITEMS];
+static qhandle_t			uiWavesShopIcons[MAX_WAVES_SHOP_ITEMS];
+static int					uiWavesShopCount;
+static int					uiWavesShopSel;
+static uiWavesCharacter_t	uiWavesChars[WAVES_ROLE_GUNNER + 1][MAX_WAVES_CHARACTERS];
+static int					uiWavesCharCount[WAVES_ROLE_GUNNER + 1];
+static int					uiWavesCharSel;
+
+static const char *UI_WavesShopIconName( const wavesShopItem_t *item ) {
+	gitem_t	*gitem;
+
+	if ( item->icon[0] ) {
+		return item->icon;
+	}
+	switch ( item->type ) {
+	case WAVES_ITEM_WEAPON:
+	case WAVES_ITEM_CONSUMABLE:
+		gitem = BG_FindItemForWeapon( (weapon_t)item->param );
+		return gitem ? gitem->icon : NULL;
+	case WAVES_ITEM_POWER:
+		return HolocronIcons[item->param];
+	case WAVES_ITEM_AMMO:
+		return "gfx/mp/ammo_power_cell";
+	case WAVES_ITEM_MAXHEALTH:
+		return "gfx/hud/i_icon_medkit";
+	case WAVES_ITEM_MAXSHIELD:
+		return "gfx/mp/large_shield";
+	case WAVES_ITEM_SHIELD:
+		return "gfx/mp/small_shield";
+	default:
+		return NULL;
+	}
+}
+
+static void UI_WavesLoadCharacters( void ) {
+	static char		buf[8192];
+	fileHandle_t	f;
+	const char		*p;
+	char			*token;
+	int				len, role;
+
+	memset( uiWavesCharCount, 0, sizeof( uiWavesCharCount ) );
+
+	len = trap->FS_Open( WAVES_CHARACTERS_FILE, &f, FS_READ );
+	if ( !f ) {
+		return;
+	}
+	if ( len >= (int)sizeof( buf ) ) {
+		Com_Printf( S_COLOR_YELLOW "%s is too big\n", WAVES_CHARACTERS_FILE );
+		trap->FS_Close( f );
+		return;
+	}
+	trap->FS_Read( buf, len, f );
+	buf[len] = 0;
+	trap->FS_Close( f );
+
+	p = buf;
+	COM_BeginParseSession( WAVES_CHARACTERS_FILE );
+	while ( 1 ) {
+		token = COM_ParseExt( &p, qtrue );
+		if ( !token[0] ) {
+			break;
+		}
+		if ( !Q_stricmp( token, "force" ) ) {
+			role = WAVES_ROLE_FORCE;
+		}
+		else if ( !Q_stricmp( token, "gunner" ) ) {
+			role = WAVES_ROLE_GUNNER;
+		}
+		else {
+			Com_Printf( S_COLOR_YELLOW "%s: unknown block '%s'\n", WAVES_CHARACTERS_FILE, token );
+			break;
+		}
+		token = COM_ParseExt( &p, qtrue );
+		if ( Q_stricmp( token, "{" ) ) {
+			Com_Printf( S_COLOR_YELLOW "%s: expected '{'\n", WAVES_CHARACTERS_FILE );
+			break;
+		}
+		while ( 1 ) {
+			token = COM_ParseExt( &p, qtrue );
+			if ( !token[0] || !Q_stricmp( token, "}" ) ) {
+				break;
+			}
+			if ( uiWavesCharCount[role] < MAX_WAVES_CHARACTERS ) {
+				uiWavesCharacter_t *character = &uiWavesChars[role][uiWavesCharCount[role]++];
+
+				if ( strchr( token, '/' ) ) {
+					Q_strncpyz( character->model, token, sizeof( character->model ) );
+				}
+				else {
+					Com_sprintf( character->model, sizeof( character->model ), "%s/default", token );
+				}
+				character->icon = 0;
+			}
+		}
+	}
+}
+
+static void UI_LoadWavesMenus( void ) {
+	const char	*icon;
+	int			i;
+
+	trap->PC_LoadGlobalDefines( "ui/jamp/menudef.h" );
+	UI_ParseMenu( "ui/jamp/waves_role.menu" );
+	UI_ParseMenu( "ui/jamp/waves_character.menu" );
+	UI_ParseMenu( "ui/jamp/waves_shop.menu" );
+	trap->PC_RemoveAllGlobalDefines();
+	uiWavesShopCount = BG_WavesLoadShop( uiWavesShop, MAX_WAVES_SHOP_ITEMS );
+	for ( i = 0; i < uiWavesShopCount; i++ ) {
+		icon = UI_WavesShopIconName( &uiWavesShop[i] );
+		uiWavesShopIcons[i] = icon ? trap->R_RegisterShaderNoMip( icon ) : -1;
+	}
+	UI_WavesLoadCharacters();
+}
+
+static int UI_WavesRole( void ) {
+	char	buf[MAX_CVAR_VALUE_STRING];
+	int		role;
+
+	trap->Cvar_VariableStringBuffer( "ui_wavesInv", buf, sizeof( buf ) );
+	role = atoi( buf );
+	return ( role > WAVES_ROLE_NONE && role <= WAVES_ROLE_GUNNER ) ? role : WAVES_ROLE_NONE;
+}
+
+static qhandle_t UI_WavesCharacterIcon( int index ) {
+	int					role = UI_WavesRole();
+	uiWavesCharacter_t	*character;
+	char				iconName[MAX_QPATH];
+	char				*skin;
+
+	if ( index < 0 || index >= uiWavesCharCount[role] ) {
+		return 0;
+	}
+	character = &uiWavesChars[role][index];
+	if ( !character->icon ) {
+		Q_strncpyz( iconName, character->model, sizeof( iconName ) );
+		skin = strchr( iconName, '/' );
+		*skin = 0;
+		character->icon = trap->R_RegisterShaderNoMip( va( "models/players/%s/icon_%s", iconName, skin + 1 ) );
+	}
+	return character->icon;
+}
+
+static void UI_WavesCharacterSelect( int index ) {
+	int		role = UI_WavesRole();
+	char	name[MAX_QPATH];
+
+	uiWavesCharSel = index;
+	if ( index < 0 || index >= uiWavesCharCount[role] ) {
+		trap->Cvar_Set( "ui_wavesCharName", "" );
+		return;
+	}
+	Q_strncpyz( name, uiWavesChars[role][index].model, sizeof( name ) );
+	*strchr( name, '/' ) = 0;
+	trap->Cvar_Set( "ui_wavesCharName", name );
+}
+
+static void UI_WavesCharacterOpen( void ) {
+	int		role = UI_WavesRole();
+	char	model[MAX_QPATH];
+	int		i, index = 0;
+
+	trap->Cvar_VariableStringBuffer( "model", model, sizeof( model ) );
+	if ( !strchr( model, '/' ) ) {
+		Q_strcat( model, sizeof( model ), "/default" );
+	}
+	for ( i = 0; i < uiWavesCharCount[role]; i++ ) {
+		if ( !Q_stricmp( uiWavesChars[role][i].model, model ) ) {
+			index = i;
+			break;
+		}
+	}
+	Menu_SetFeederSelection( NULL, FEEDER_WAVES_CHARACTERS, index, "waves_character" );
+	UI_WavesCharacterSelect( index );
+}
+
+static void UI_WavesCharacterApply( void ) {
+	int	role = UI_WavesRole();
+
+	if ( uiWavesCharSel < 0 || uiWavesCharSel >= uiWavesCharCount[role] ) {
+		return;
+	}
+	trap->Cvar_Set( "model", uiWavesChars[role][uiWavesCharSel].model );
+	trap->Cvar_Set( "char_color_red", "255" );
+	trap->Cvar_Set( "char_color_green", "255" );
+	trap->Cvar_Set( "char_color_blue", "255" );
+}
+
+static int UI_WavesShopInventory( int *levels ) {
+	char		buf[MAX_CVAR_VALUE_STRING];
+	const char	*p = buf, *token;
+	int			role, i;
+
+	trap->Cvar_VariableStringBuffer( "ui_wavesInv", buf, sizeof( buf ) );
+	role = atoi( COM_Parse( &p ) );
+	for ( i = 0; i < uiWavesShopCount; i++ ) {
+		token = COM_Parse( &p );
+		levels[i] = token[0] ? atoi( token ) : 0;
+	}
+	return role;
+}
+
+static int UI_WavesShopVisible( int *visible, int *levels ) {
+	int	role = UI_WavesShopInventory( levels );
+	int	i, count = 0;
+
+	for ( i = 0; i < uiWavesShopCount; i++ ) {
+		if ( uiWavesShop[i].role == WAVES_ROLE_NONE || uiWavesShop[i].role == role ) {
+			visible[count++] = i;
+		}
+	}
+	return count;
+}
+
+static const char *UI_WavesShopItemText( int index, int column, qhandle_t *icon ) {
+	int						visible[MAX_WAVES_SHOP_ITEMS], levels[MAX_WAVES_SHOP_ITEMS];
+	int						count = UI_WavesShopVisible( visible, levels );
+	const wavesShopItem_t	*item;
+	int						itemLevel, price;
+
+	if ( index < 0 || index >= count ) {
+		return "";
+	}
+	item = &uiWavesShop[visible[index]];
+	itemLevel = levels[visible[index]];
+	price = BG_WavesItemPrice( item, itemLevel );
+
+	switch ( column ) {
+	case 0:
+		*icon = uiWavesShopIcons[visible[index]];
+		return "";
+	case 1:
+		return item->title;
+	case 2:
+		if ( item->numLevels > 1 ) {
+			return va( "%i/%i", itemLevel, item->numLevels );
+		}
+		if ( item->numLevels == 1 && itemLevel ) {
+			return "Owned";
+		}
+		return "";
+	default:
+		if ( price < 0 ) {
+			return "-";
+		}
+		return va( "%s%i", price > (int)trap->Cvar_VariableValue( "ui_wavesPoints" ) ? S_COLOR_RED : "", price );
+	}
+}
+
+static void UI_WavesShopBuy( void ) {
+	int	visible[MAX_WAVES_SHOP_ITEMS], levels[MAX_WAVES_SHOP_ITEMS];
+	int	count = UI_WavesShopVisible( visible, levels );
+
+	if ( uiWavesShopSel >= 0 && uiWavesShopSel < count ) {
+		trap->Cmd_ExecuteText( EXEC_APPEND, va( "waves_buy %s\n", uiWavesShop[visible[uiWavesShopSel]].name ) );
+	}
+}
+
 void UI_Load( void ) {
 	char *menuSet;
 	char lastName[1024];
@@ -1509,6 +1775,10 @@ void UI_Load( void ) {
 	UI_LoadBots();
 
 	UI_LoadMenus(menuSet, qtrue);
+	if (uiInfo.inGameLoad)
+	{
+		UI_LoadWavesMenus();
+	}
 	Menus_CloseAll();
 	Menus_ActivateByName(lastName);
 }
@@ -6196,6 +6466,12 @@ static void UI_RunMenuScript(char **args)
 			if (ui_netGametype.integer >= 0 && ui_netGametype.integer < uiInfo.numGameTypes) {
 				trap->Cmd_ExecuteText( EXEC_APPEND, va("callvote g_gametype %i\n",uiInfo.gameTypes[ui_netGametype.integer].gtEnum) );
 			}
+		} else if (Q_stricmp(name, "wavesBuy") == 0) {
+			UI_WavesShopBuy();
+		} else if (Q_stricmp(name, "wavesCharacterOpen") == 0) {
+			UI_WavesCharacterOpen();
+		} else if (Q_stricmp(name, "wavesSetCharacter") == 0) {
+			UI_WavesCharacterApply();
 		} else if (Q_stricmp(name, "voteLeader") == 0) {
 			if (uiInfo.teamIndex >= 0 && uiInfo.teamIndex < uiInfo.myTeamCount) {
 				trap->Cmd_ExecuteText( EXEC_APPEND, va("callteamvote leader \"%s\"\n",uiInfo.teamNames[uiInfo.teamIndex]) );
@@ -7978,6 +8254,16 @@ static int UI_FeederCount(float feederID)
 		case FEEDER_SERVERS:
 			return uiInfo.serverStatus.numDisplayServers;
 
+		case FEEDER_WAVES_SHOP:
+		{
+			int visible[MAX_WAVES_SHOP_ITEMS], levels[MAX_WAVES_SHOP_ITEMS];
+
+			return UI_WavesShopVisible( visible, levels );
+		}
+
+		case FEEDER_WAVES_CHARACTERS:
+			return uiWavesCharCount[UI_WavesRole()];
+
 		case FEEDER_SERVERSTATUS:
 			return Com_Clampi( 0, MAX_SERVERSTATUS_LINES, uiInfo.serverStatusInfo.numLines );
 
@@ -8449,6 +8735,10 @@ static const char *UI_FeederItemText(float feederID, int index, int column,
 	{
 		return datapadMoveData[uiInfo.movesTitleIndex][index].title;
 	}
+	else if (feederID == FEEDER_WAVES_SHOP)
+	{
+		return UI_WavesShopItemText( index, column, handle1 );
+	}
 	else if (feederID == FEEDER_MOVES_TITLES)
 	{
 		return datapadMoveTitleData[index];
@@ -8511,6 +8801,10 @@ static qhandle_t UI_FeederItemImage(float feederID, int index) {
 	int	validCnt,i;
 	static char info[MAX_STRING_CHARS];
 
+	if (feederID == FEEDER_WAVES_CHARACTERS)
+	{
+		return UI_WavesCharacterIcon( index );
+	}
 	if (feederID == FEEDER_SABER_SINGLE_INFO)
 	{
 		return 0;
@@ -8868,6 +9162,14 @@ qboolean UI_FeederSelection(float feederFloat, int index, itemDef_t *item)
 				}
 			}
 		}
+	}
+	else if (feederID == FEEDER_WAVES_SHOP)
+	{
+		uiWavesShopSel = index;
+	}
+	else if (feederID == FEEDER_WAVES_CHARACTERS)
+	{
+		UI_WavesCharacterSelect( index );
 	}
 	else if (feederID == FEEDER_MOVES_TITLES)
 	{
@@ -9961,6 +10263,7 @@ void UI_Init( qboolean inGameLoad ) {
 	if (inGameLoad)
 	{
 		UI_LoadMenus("ui/jampingame.txt", qtrue);
+		UI_LoadWavesMenus();
 	}
 	else if (!ui_bypassMainMenuLoad.integer)
 	{

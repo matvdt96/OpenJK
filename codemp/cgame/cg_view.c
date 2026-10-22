@@ -2441,6 +2441,7 @@ void CG_DrawActiveFrame( int serverTime, stereoFrame_t stereoView, qboolean demo
 
 	BG_SetForcePushChargeAnimTime( g_pushChargeThreshold.integer + Q_max( 0, g_pushChargeTime.integer ) );
 	BG_SetForceRepulseChargeAnimTime( Q_max( 0, g_repulseChargeTime.integer ) );
+	CG_WavesUpdateUI();
 	cg.demoPlayback = demoPlayback;
 
 	if (cg.snap && ui_myteam.integer != cg.snap->ps.persistant[PERS_TEAM])

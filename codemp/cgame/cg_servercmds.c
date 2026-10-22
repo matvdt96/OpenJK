@@ -1599,6 +1599,16 @@ int svcmdcmp( const void *a, const void *b ) {
 	return Q_stricmp( (const char *)a, ((serverCommand_t*)b)->cmd );
 }
 
+static void CG_WavesInventory_f( void ) {
+	char	buf[MAX_CVAR_VALUE_STRING] = { 0 };
+	int		i, argc = trap->Cmd_Argc();
+
+	for ( i = 1; i < argc; i++ ) {
+		Q_strcat( buf, sizeof( buf ), va( i > 1 ? " %s" : "%s", CG_Argv( i ) ) );
+	}
+	trap->Cvar_Set( "ui_wavesInv", buf );
+}
+
 static serverCommand_t	commands[] = {
 	{ "chat",				CG_Chat_f },
 	{ "clientLevelShot",	CG_ClientLevelShot_f },
@@ -1624,6 +1634,7 @@ static serverCommand_t	commands[] = {
 	{ "sxd",				CG_ParseSiegeExtendedData },
 	{ "tchat",				CG_Chat_f },
 	{ "tinfo",				CG_ParseTeamInfo },
+	{ "wavesinv",			CG_WavesInventory_f },
 };
 
 static const size_t numCommands = ARRAY_LEN( commands );

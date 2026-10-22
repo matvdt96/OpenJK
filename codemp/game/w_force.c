@@ -380,7 +380,7 @@ void WP_InitForcePowers( gentity_t *ent ) {
 	else {
 		if ( warnClient || !ent->client->sess.setForce ) {
 			// the client's rank is too high for the server and has been autocapped, so tell them
-			if ( level.gametype != GT_HOLOCRON && level.gametype != GT_JEDIMASTER ) {
+			if ( level.gametype != GT_HOLOCRON && level.gametype != GT_JEDIMASTER && level.gametype != GT_WAVES ) {
 				didEvent = qtrue;
 
 				if ( !(ent->r.svFlags & SVF_BOT) && ent->s.eType != ET_NPC ) {
