@@ -1484,7 +1484,10 @@ typedef struct uiWavesCharacter_s {
 static wavesShopItem_t		uiWavesShop[MAX_WAVES_SHOP_ITEMS];
 static qhandle_t			uiWavesShopIcons[MAX_WAVES_SHOP_ITEMS];
 static int					uiWavesShopCount;
-static int					uiWavesShopSel;
+static int					uiWavesShopSel = -1;
+static int					uiWavesShopTab = 1;
+static int					uiWavesShopClickTime;
+static sfxHandle_t			uiWavesShopSound;
 static uiWavesCharacter_t	uiWavesChars[WAVES_ROLE_GUNNER + 1][MAX_WAVES_CHARACTERS];
 static int					uiWavesCharCount[WAVES_ROLE_GUNNER + 1];
 static int					uiWavesCharSel;
@@ -1594,6 +1597,7 @@ static void UI_LoadWavesMenus( void ) {
 		icon = UI_WavesShopIconName( &uiWavesShop[i] );
 		uiWavesShopIcons[i] = icon ? trap->R_RegisterShaderNoMip( icon ) : -1;
 	}
+	uiWavesShopSound = trap->S_RegisterSound( "sound/interface/button1.wav" );
 	UI_WavesLoadCharacters();
 }
 
@@ -1684,6 +1688,57 @@ static void UI_WavesCharacterChoose( void ) {
 	Menus_CloseAll();
 }
 
+#define WAVES_SHOP_TABS			3
+#define WAVES_SHOP_DOUBLECLICK	400
+#define WAVES_SHOP_UNIT			( 2.0f / 3.0f )
+#define WAVES_SHOP_WIDTH		840
+#define WAVES_SHOP_HEIGHT		620
+#define WAVES_SHOP_MAX_HITS		( MAX_WAVES_SHOP_ITEMS + 8 )
+
+typedef enum {
+	WAVES_HIT_TAB,
+	WAVES_HIT_CELL,
+	WAVES_HIT_BUY,
+	WAVES_HIT_QUICK,
+	WAVES_HIT_CLOSE
+} wavesShopHitType_t;
+
+typedef struct wavesShopHit_s {
+	float	x, y, w, h;
+	int		type;
+	int		param;
+} wavesShopHit_t;
+
+static const char *uiWavesShopTabNames[WAVES_ROLE_GUNNER + 1][WAVES_SHOP_TABS] = {
+	{ "", "", "" },
+	{ "POWERS", "SABER", "UPGRADES" },
+	{ "WEAPONS", "EXPLOSIVES", "UPGRADES" }
+};
+
+static const vec4_t uiWavesAmber		= { 1.0f, 0.682f, 0.0f, 1.0f };
+static const vec4_t uiWavesAmberDark	= { 0.227f, 0.173f, 0.031f, 1.0f };
+static const vec4_t uiWavesPipOff		= { 0.365f, 0.29f, 0.102f, 1.0f };
+static const vec4_t uiWavesWhite		= { 1.0f, 1.0f, 1.0f, 1.0f };
+static const vec4_t uiWavesText			= { 0.91f, 0.894f, 0.855f, 1.0f };
+static const vec4_t uiWavesName			= { 0.839f, 0.816f, 0.761f, 1.0f };
+static const vec4_t uiWavesTan			= { 0.78f, 0.706f, 0.541f, 1.0f };
+static const vec4_t uiWavesGrey			= { 0.604f, 0.639f, 0.69f, 1.0f };
+static const vec4_t uiWavesGreyDark		= { 0.541f, 0.561f, 0.596f, 1.0f };
+static const vec4_t uiWavesFrom			= { 0.78f, 0.761f, 0.714f, 1.0f };
+static const vec4_t uiWavesRed			= { 1.0f, 0.42f, 0.369f, 1.0f };
+static const vec4_t uiWavesPanel		= { 0.051f, 0.071f, 0.098f, 1.0f };
+static const vec4_t uiWavesCell			= { 0.067f, 0.094f, 0.133f, 1.0f };
+static const vec4_t uiWavesTab			= { 0.094f, 0.125f, 0.169f, 1.0f };
+static const vec4_t uiWavesCellBorder	= { 0.133f, 0.173f, 0.227f, 1.0f };
+static const vec4_t uiWavesSelected		= { 0.141f, 0.11f, 0.031f, 1.0f };
+static const vec4_t uiWavesStatBox		= { 0.043f, 0.063f, 0.09f, 1.0f };
+static const vec4_t uiWavesDisabled		= { 0.165f, 0.184f, 0.216f, 1.0f };
+
+static float			uiWavesShopX, uiWavesShopY, uiWavesShopFade;
+static int				uiWavesShopFont;
+static wavesShopHit_t	uiWavesShopHits[WAVES_SHOP_MAX_HITS];
+static int				uiWavesShopHitCount;
+
 static int UI_WavesShopInventory( int *levels ) {
 	char		buf[MAX_CVAR_VALUE_STRING];
 	const char	*p = buf, *token;
@@ -1695,63 +1750,543 @@ static int UI_WavesShopInventory( int *levels ) {
 		token = COM_Parse( &p );
 		levels[i] = token[0] ? atoi( token ) : 0;
 	}
-	return role;
+	return ( role > WAVES_ROLE_NONE && role <= WAVES_ROLE_GUNNER ) ? role : WAVES_ROLE_NONE;
 }
 
-static int UI_WavesShopVisible( int *visible, int *levels ) {
-	int	role = UI_WavesShopInventory( levels );
+static int UI_WavesShopTabItems( int role, int tab, int *items ) {
 	int	i, count = 0;
 
 	for ( i = 0; i < uiWavesShopCount; i++ ) {
-		if ( uiWavesShop[i].role == WAVES_ROLE_NONE || uiWavesShop[i].role == role ) {
-			visible[count++] = i;
+		if ( uiWavesShop[i].tab == tab && ( uiWavesShop[i].role == WAVES_ROLE_NONE || uiWavesShop[i].role == role ) ) {
+			items[count++] = i;
 		}
 	}
 	return count;
 }
 
-static const char *UI_WavesShopItemText( int index, int column, qhandle_t *icon ) {
-	int						visible[MAX_WAVES_SHOP_ITEMS], levels[MAX_WAVES_SHOP_ITEMS];
-	int						count = UI_WavesShopVisible( visible, levels );
-	const wavesShopItem_t	*item;
-	int						itemLevel, price;
+static int UI_WavesShopSelected( int role ) {
+	int	items[MAX_WAVES_SHOP_ITEMS];
+	int	i, count = UI_WavesShopTabItems( role, uiWavesShopTab, items );
 
-	if ( index < 0 || index >= count ) {
-		return "";
+	for ( i = 0; i < count; i++ ) {
+		if ( items[i] == uiWavesShopSel ) {
+			return uiWavesShopSel;
+		}
 	}
-	item = &uiWavesShop[visible[index]];
-	itemLevel = levels[visible[index]];
-	price = BG_WavesItemPrice( item, itemLevel );
+	uiWavesShopSel = count ? items[0] : -1;
+	return uiWavesShopSel;
+}
 
-	switch ( column ) {
-	case 0:
-		*icon = uiWavesShopIcons[visible[index]];
-		return "";
-	case 1:
-		return item->title;
-	case 2:
-		if ( item->numLevels > 1 ) {
-			return va( "%i/%i", itemLevel, item->numLevels );
-		}
-		if ( item->numLevels == 1 && itemLevel ) {
-			return "Owned";
-		}
-		return "";
+static qboolean UI_WavesShopCanBuy( int index, int itemLevel ) {
+	int price = BG_WavesItemPrice( &uiWavesShop[index], itemLevel );
+
+	return price >= 0 && price <= (int)trap->Cvar_VariableValue( "ui_wavesPoints" );
+}
+
+static void UI_WavesShopBuy( int index ) {
+	trap->Cmd_ExecuteText( EXEC_APPEND, va( "waves_buy %s\n", uiWavesShop[index].name ) );
+}
+
+static qboolean UI_WavesShopStat( const wavesShopItem_t *item, const char **label, const char **format, int *base, int *step ) {
+	*format = "+%i%%";
+	*base = 0;
+	*step = item->amount;
+	switch ( item->type ) {
+	case WAVES_ITEM_WEAPONDAMAGE:	*label = "WEAPON DAMAGE";		return qtrue;
+	case WAVES_ITEM_SABERDAMAGE:	*label = "SABER DAMAGE";		return qtrue;
+	case WAVES_ITEM_FORCEDAMAGE:	*label = "FORCE POWER DAMAGE";	return qtrue;
+	case WAVES_ITEM_MAXAMMO:		*label = "MAX AMMO";			return qtrue;
+	case WAVES_ITEM_FORCEREGEN:		*label = "FORCE REGENERATION";	return qtrue;
+	case WAVES_ITEM_MAXHEALTH:
+		*label = "MAX HEALTH";
+		*format = "%i";
+		*base = WAVES_BASE_HEALTH;
+		*step = WAVES_HEALTH_STEP;
+		return qtrue;
+	case WAVES_ITEM_MAXSHIELD:
+		*label = "MAX SHIELD";
+		*format = "%i";
+		*base = WAVES_BASE_SHIELD;
+		*step = WAVES_SHIELD_STEP;
+		return qtrue;
+	case WAVES_ITEM_HEALTHREGEN:
+		*label = "HEALTH REGENERATION";
+		*format = "%i/s";
+		return qtrue;
 	default:
-		if ( price < 0 ) {
-			return "-";
-		}
-		return va( "%s%i", price > (int)trap->Cvar_VariableValue( "ui_wavesPoints" ) ? S_COLOR_RED : "", price );
+		return qfalse;
 	}
 }
 
-static void UI_WavesShopBuy( void ) {
-	int	visible[MAX_WAVES_SHOP_ITEMS], levels[MAX_WAVES_SHOP_ITEMS];
-	int	count = UI_WavesShopVisible( visible, levels );
+static void UI_WavesShopColor( const vec4_t in, vec4_t out ) {
+	out[0] = in[0];
+	out[1] = in[1];
+	out[2] = in[2];
+	out[3] = in[3] * uiWavesShopFade;
+}
 
-	if ( uiWavesShopSel >= 0 && uiWavesShopSel < count ) {
-		trap->Cmd_ExecuteText( EXEC_APPEND, va( "waves_buy %s\n", uiWavesShop[visible[uiWavesShopSel]].name ) );
+// Drawing helpers take coordinates in mockup pixels relative to the panel
+static void UI_WavesShopFill( float x, float y, float w, float h, const vec4_t color ) {
+	vec4_t c;
+
+	UI_WavesShopColor( color, c );
+	UI_FillRect( uiWavesShopX + x * WAVES_SHOP_UNIT, uiWavesShopY + y * WAVES_SHOP_UNIT, w * WAVES_SHOP_UNIT, h * WAVES_SHOP_UNIT, c );
+}
+
+static void UI_WavesShopBorder( float x, float y, float w, float h, float size, const vec4_t color ) {
+	UI_WavesShopFill( x, y, w, size, color );
+	UI_WavesShopFill( x, y + h - size, w, size, color );
+	UI_WavesShopFill( x, y + size, size, h - size * 2, color );
+	UI_WavesShopFill( x + w - size, y + size, size, h - size * 2, color );
+}
+
+static void UI_WavesShopBox( float x, float y, float w, float h, const vec4_t fill, float size, const vec4_t border ) {
+	if ( fill ) {
+		UI_WavesShopFill( x, y, w, h, fill );
 	}
+	if ( border ) {
+		UI_WavesShopBorder( x, y, w, h, size, border );
+	}
+}
+
+static void UI_WavesShopPic( float x, float y, float w, float h, qhandle_t shader ) {
+	vec4_t c;
+
+	UI_WavesShopColor( uiWavesWhite, c );
+	trap->R_SetColor( c );
+	UI_DrawHandlePic( uiWavesShopX + x * WAVES_SHOP_UNIT, uiWavesShopY + y * WAVES_SHOP_UNIT, w * WAVES_SHOP_UNIT, h * WAVES_SHOP_UNIT, shader );
+	trap->R_SetColor( NULL );
+}
+
+static float UI_WavesShopScale( float size ) {
+	float height = Text_Height( "", 1.0f, uiWavesShopFont );
+
+	return height > 0 ? size * WAVES_SHOP_UNIT / height : 1.0f;
+}
+
+static float UI_WavesShopTextWidth( const char *text, float size ) {
+	return Text_Width( text, UI_WavesShopScale( size ), uiWavesShopFont ) / WAVES_SHOP_UNIT;
+}
+
+// y is the vertical center of the text; returns the drawn width
+static float UI_WavesShopText( float x, float y, float w, float size, const vec4_t color, const char *text, int align ) {
+	float	width = UI_WavesShopTextWidth( text, size );
+	vec4_t	c;
+
+	if ( w > 0 && width > w ) {
+		size *= w / width;
+		width = w;
+	}
+	if ( align == ITEM_ALIGN_CENTER ) {
+		x += ( w - width ) * 0.5f;
+	}
+	else if ( align == ITEM_ALIGN_RIGHT ) {
+		x += w - width;
+	}
+	UI_WavesShopColor( color, c );
+	Text_Paint( uiWavesShopX + x * WAVES_SHOP_UNIT, uiWavesShopY + ( y - size * 0.5f ) * WAVES_SHOP_UNIT,
+		UI_WavesShopScale( size ), c, text, 0, 0, ITEM_TEXTSTYLE_NORMAL, uiWavesShopFont );
+	return width;
+}
+
+// Word wrap, lines centered on y + lineHeight / 2 each; returns the number of lines drawn
+static int UI_WavesShopWrap( float x, float y, float w, float size, float lineHeight, int maxLines, const vec4_t color, const char *text, int align ) {
+	char	line[256];
+	int		len, lastSpace, lines = 0;
+
+	while ( *text && lines < maxLines ) {
+		len = lastSpace = 0;
+		while ( text[len] && len < (int)sizeof( line ) - 1 ) {
+			line[len] = text[len];
+			line[len + 1] = 0;
+			if ( UI_WavesShopTextWidth( line, size ) > w ) {
+				break;
+			}
+			if ( text[len] == ' ' ) {
+				lastSpace = len;
+			}
+			len++;
+		}
+		if ( text[len] && lastSpace && lines < maxLines - 1 ) {
+			len = lastSpace;
+		}
+		else if ( text[len] && lines == maxLines - 1 ) {
+			len = strlen( text ) < sizeof( line ) ? (int)strlen( text ) : (int)sizeof( line ) - 1;
+		}
+		if ( !len ) {
+			break;
+		}
+		Q_strncpyz( line, text, len + 1 );
+		UI_WavesShopText( x, y + lineHeight * ( lines + 0.5f ), w, size, color, line, align );
+		text += len;
+		while ( *text == ' ' ) {
+			text++;
+		}
+		lines++;
+	}
+	return lines;
+}
+
+static void UI_WavesShopArrow( float x, float y, float w, const vec4_t color ) {
+	const float	head = 6.0f, half = 5.0f;
+	int			i;
+
+	UI_WavesShopFill( x, y - 1.0f, w - head, 2.0f, color );
+	for ( i = 0; i < (int)head; i++ ) {
+		float h = half * ( head - i ) / head;
+
+		UI_WavesShopFill( x + w - head + i, y - h, 1.0f, h * 2.0f, color );
+	}
+}
+
+// "from -> to" with a drawn arrow; returns the width
+static float UI_WavesShopTransition( float x, float y, float fromSize, const vec4_t fromColor, const char *from,
+	float toSize, const vec4_t toColor, const char *to, float arrow, float gap, qboolean draw ) {
+	float width = UI_WavesShopTextWidth( from, fromSize ) + gap + arrow + gap + UI_WavesShopTextWidth( to, toSize );
+
+	if ( draw ) {
+		x += UI_WavesShopText( x, y, 0, fromSize, fromColor, from, ITEM_ALIGN_LEFT ) + gap;
+		UI_WavesShopArrow( x, y, arrow, toColor );
+		UI_WavesShopText( x + arrow + gap, y, 0, toSize, toColor, to, ITEM_ALIGN_LEFT );
+	}
+	return width;
+}
+
+static void UI_WavesShopHit( float x, float y, float w, float h, int type, int param ) {
+	wavesShopHit_t *hit;
+
+	if ( uiWavesShopHitCount >= WAVES_SHOP_MAX_HITS ) {
+		return;
+	}
+	hit = &uiWavesShopHits[uiWavesShopHitCount++];
+	hit->x = x;
+	hit->y = y;
+	hit->w = w;
+	hit->h = h;
+	hit->type = type;
+	hit->param = param;
+}
+
+static qboolean UI_WavesShopHover( float x, float y, float w, float h ) {
+	float cx = ( uiInfo.uiDC.cursorx - uiWavesShopX ) / WAVES_SHOP_UNIT;
+	float cy = ( uiInfo.uiDC.cursory - uiWavesShopY ) / WAVES_SHOP_UNIT;
+
+	return cx >= x && cx < x + w && cy >= y && cy < y + h;
+}
+
+static void UI_WavesShopPips( float centerX, float y, float w, float h, float gap, int numLevels, int itemLevel, qboolean showNext ) {
+	float	x = centerX - ( numLevels * w + ( numLevels - 1 ) * gap ) * 0.5f;
+	vec4_t	next;
+	int		i;
+
+	VectorCopy4( uiWavesAmber, next );
+	next[3] = 0.45f;
+	for ( i = 0; i < numLevels; i++, x += w + gap ) {
+		if ( i < itemLevel ) {
+			UI_WavesShopFill( x, y, w, h, uiWavesAmber );
+		}
+		else if ( i == itemLevel && showNext ) {
+			UI_WavesShopBox( x, y, w, h, next, 1.0f, uiWavesAmber );
+		}
+		else {
+			UI_WavesShopBorder( x, y, w, h, 1.0f, uiWavesPipOff );
+		}
+	}
+}
+
+static void UI_WavesShopDrawHeader( void ) {
+	char	cs[MAX_STRING_CHARS];
+	int		round, state, enemies, nextTime;
+	float	x = WAVES_SHOP_WIDTH - 22;
+
+	UI_WavesShopText( 22, 30, 0, 26, uiWavesAmber, "SHOP", ITEM_ALIGN_LEFT );
+
+	x -= UI_WavesShopText( x - 200, 33, 200, 14, uiWavesAmber, "POINTS", ITEM_ALIGN_RIGHT ) + 5;
+	x -= UI_WavesShopText( x - 200, 30, 200, 22, uiWavesWhite, UI_Cvar_VariableString( "ui_wavesPoints" ), ITEM_ALIGN_RIGHT ) + 18;
+
+	trap->GetConfigString( CS_WAVES, cs, sizeof( cs ) );
+	if ( sscanf( cs, "%i %i %i %i", &round, &state, &enemies, &nextTime ) == 4 && state ) {
+		UI_WavesShopText( x - 200, 31, 200, 15, uiWavesGrey, va( "ROUND %i", state == 1 ? round + 1 : round ), ITEM_ALIGN_RIGHT );
+	}
+	UI_WavesShopFill( 0, 60, WAVES_SHOP_WIDTH, 1, uiWavesAmberDark );
+}
+
+static void UI_WavesShopDrawTabs( int role ) {
+	float	x = 22;
+	int		tab;
+
+	for ( tab = 1; tab <= WAVES_SHOP_TABS; tab++ ) {
+		const char	*name = uiWavesShopTabNames[role][tab - 1];
+		float		w;
+
+		if ( !name[0] ) {
+			continue;
+		}
+		w = UI_WavesShopTextWidth( name, 17 ) + 52;
+		if ( tab == uiWavesShopTab ) {
+			UI_WavesShopFill( x, 73, w, 40, uiWavesAmber );
+			UI_WavesShopText( x, 93, w, 17, uiWavesPanel, name, ITEM_ALIGN_CENTER );
+		}
+		else {
+			UI_WavesShopFill( x, 73, w, 40, UI_WavesShopHover( x, 73, w, 40 ) ? uiWavesCellBorder : uiWavesTab );
+			UI_WavesShopText( x, 93, w, 17, uiWavesTan, name, ITEM_ALIGN_CENTER );
+			UI_WavesShopHit( x, 73, w, 40, WAVES_HIT_TAB, tab );
+		}
+		x += w + 6;
+	}
+	UI_WavesShopFill( 0, 113, WAVES_SHOP_WIDTH, 2, uiWavesAmber );
+}
+
+static void UI_WavesShopDrawCell( float x, float y, float w, float h, qboolean large, int index, int itemLevel, qboolean selected ) {
+	const wavesShopItem_t	*item = &uiWavesShop[index];
+	int						price = BG_WavesItemPrice( item, itemLevel );
+	qboolean				maxed = price < 0;
+	qboolean				poor = !maxed && !UI_WavesShopCanBuy( index, itemLevel );
+	float					icon = large ? 44 : 40, top = large ? 10 : 8, bottom = large ? 8 : 6;
+	float					nameSize = large ? 13 : 12, nameLine = large ? 14 : 13, priceY;
+	const char				*priceText;
+	const float				*priceColor;
+
+	if ( selected ) {
+		UI_WavesShopBox( x, y, w, h, uiWavesSelected, 2, uiWavesAmber );
+	}
+	else {
+		UI_WavesShopBox( x, y, w, h, UI_WavesShopHover( x, y, w, h ) ? uiWavesTab : uiWavesCell, 1, uiWavesCellBorder );
+	}
+	UI_WavesShopHit( x, y, w, h, WAVES_HIT_CELL, index );
+
+	uiWavesShopFade = poor && !selected ? 0.5f : 1.0f;
+	if ( uiWavesShopIcons[index] != -1 ) {
+		UI_WavesShopPic( x + ( w - icon ) * 0.5f, y + top, icon, icon, uiWavesShopIcons[index] );
+	}
+	UI_WavesShopWrap( x + 4, y + top + icon + 4, w - 8, nameSize, nameLine, 2, uiWavesName, item->title, ITEM_ALIGN_CENTER );
+
+	priceY = y + h - bottom - 8;
+	if ( item->numLevels > 1 ) {
+		UI_WavesShopPips( x + w * 0.5f, priceY - 14, 18, 6, 4, item->numLevels, itemLevel, qfalse );
+	}
+	if ( maxed ) {
+		priceText = item->numLevels > 1 ? "MAX" : "OWNED";
+		priceColor = uiWavesAmber;
+	}
+	else {
+		priceText = va( "%i", price );
+		priceColor = poor ? uiWavesRed : uiWavesWhite;
+	}
+	UI_WavesShopText( x, priceY, w, 13, priceColor, priceText, ITEM_ALIGN_CENTER );
+	uiWavesShopFade = 1.0f;
+}
+
+static void UI_WavesShopDrawGrid( int role, const int *levels, int selected ) {
+	const float	left = 22, top = 133, width = 558, height = 409;
+	int			items[MAX_WAVES_SHOP_ITEMS];
+	int			count = UI_WavesShopTabItems( role, uiWavesShopTab, items );
+	qboolean	large = count <= 8;
+	int			cols = large ? 4 : 6;
+	float		gap = large ? 10 : 8, cellH = large ? 132 : 116;
+	float		cellW = ( width - gap * ( cols - 1 ) ) / cols;
+	int			i, maxCells = cols * (int)( ( height + gap ) / ( cellH + gap ) );
+
+	for ( i = 0; i < count && i < maxCells; i++ ) {
+		float x = left + ( i % cols ) * ( cellW + gap );
+		float y = top + ( i / cols ) * ( cellH + gap );
+
+		UI_WavesShopDrawCell( x, y, cellW, cellH, large, items[i], levels[items[i]], items[i] == selected );
+	}
+}
+
+static void UI_WavesShopDrawDetail( const int *levels, int index ) {
+	const float				left = 598, top = 133, width = 220, height = 409, pad = 16;
+	const float				x = left + pad, w = width - pad * 2;
+	const wavesShopItem_t	*item;
+	const char				*label, *format, *text;
+	int						itemLevel, price, base, step, i;
+	float					y, bottom, tw;
+	char					from[32], to[32];
+	qboolean				maxed, canBuy;
+
+	UI_WavesShopBox( left, top, width, height, uiWavesCell, 1, uiWavesAmberDark );
+	if ( index < 0 ) {
+		return;
+	}
+	item = &uiWavesShop[index];
+	itemLevel = levels[index];
+	price = BG_WavesItemPrice( item, itemLevel );
+	maxed = price < 0;
+	canBuy = UI_WavesShopCanBuy( index, itemLevel );
+
+	y = top + pad;
+	if ( uiWavesShopIcons[index] != -1 ) {
+		UI_WavesShopPic( left + ( width - 56 ) * 0.5f, y, 56, 56, uiWavesShopIcons[index] );
+	}
+	y += 56 + 8;
+	UI_WavesShopText( x, y + 12, w, 22, uiWavesWhite, item->title, ITEM_ALIGN_CENTER );
+	y += 24 + 8;
+
+	if ( item->numLevels > 1 ) {
+		UI_WavesShopPips( left + width * 0.5f, y, 34, 8, 6, item->numLevels, itemLevel, !maxed );
+		y += 8 + 8;
+	}
+	if ( item->numLevels > 1 && !maxed ) {
+		Q_strncpyz( from, va( "Level %i", itemLevel ), sizeof( from ) );
+		Q_strncpyz( to, va( "%i", itemLevel + 1 ), sizeof( to ) );
+		tw = UI_WavesShopTransition( 0, 0, 15, uiWavesTan, from, 15, uiWavesTan, to, 12, 5, qfalse );
+		UI_WavesShopTransition( x + ( w - tw ) * 0.5f, y + 8, 15, uiWavesTan, from, 15, uiWavesTan, to, 12, 5, qtrue );
+	}
+	else {
+		text = item->numLevels > 1 ? "Max level" : item->numLevels == 1 ? ( itemLevel ? "Owned" : "Not owned" ) : "Can be bought again";
+		UI_WavesShopText( x, y + 8, w, 15, uiWavesTan, text, ITEM_ALIGN_CENTER );
+	}
+	y += 16 + 8;
+
+	if ( item->numLevels && UI_WavesShopStat( item, &label, &format, &base, &step ) ) {
+		UI_WavesShopBox( x, y, w, 60, uiWavesStatBox, 1, uiWavesCellBorder );
+		UI_WavesShopText( x + 12, y + 16, w - 24, 12, uiWavesGrey, label, ITEM_ALIGN_LEFT );
+		Q_strncpyz( from, va( format, base + step * itemLevel ), sizeof( from ) );
+		if ( maxed ) {
+			UI_WavesShopText( x, y + 40, w, 26, uiWavesAmber, from, ITEM_ALIGN_CENTER );
+		}
+		else {
+			Q_strncpyz( to, va( format, base + step * ( itemLevel + 1 ) ), sizeof( to ) );
+			tw = UI_WavesShopTransition( 0, 0, 22, uiWavesFrom, from, 26, uiWavesAmber, to, 16, 10, qfalse );
+			UI_WavesShopTransition( x + ( w - tw ) * 0.5f, y + 40, 22, uiWavesFrom, from, 26, uiWavesAmber, to, 16, 10, qtrue );
+		}
+		y += 60 + 8;
+
+		for ( i = 0; i < item->numLevels; i++, y += 18 ) {
+			const float *color = i == itemLevel ? uiWavesWhite : i < itemLevel ? uiWavesGreyDark : uiWavesTan;
+
+			if ( i == itemLevel ) {
+				UI_WavesShopFill( x - 6, y, w + 12, 18, uiWavesSelected );
+			}
+			Q_strncpyz( from, va( format, base + step * i ), sizeof( from ) );
+			Q_strncpyz( to, va( format, base + step * ( i + 1 ) ), sizeof( to ) );
+			UI_WavesShopText( x, y + 9, 0, 14, color, va( "Lv. %i", i + 1 ), ITEM_ALIGN_LEFT );
+			tw = UI_WavesShopTransition( 0, 0, 14, color, from, 14, color, to, 10, 4, qfalse );
+			UI_WavesShopTransition( x + w - tw, y + 9, 14, color, from, 14, color, to, 10, 4, qtrue );
+		}
+		y += 8;
+	}
+
+	bottom = top + height - pad - 42 - 10 - 20;
+	if ( item->desc[0] && y + 16 <= bottom ) {
+		UI_WavesShopWrap( x, y, w, 13, 17, (int)( ( bottom - 6 - y ) / 17 ), uiWavesGrey, item->desc, ITEM_ALIGN_LEFT );
+	}
+
+	y = top + height - pad - 42;
+	UI_WavesShopText( x, y - 20, 0, 16, uiWavesGrey, "Price", ITEM_ALIGN_LEFT );
+	UI_WavesShopText( x, y - 20, w, 16, maxed ? uiWavesGrey : canBuy ? uiWavesWhite : uiWavesRed, maxed ? "-" : va( "%i", price ), ITEM_ALIGN_RIGHT );
+
+	if ( canBuy ) {
+		UI_WavesShopBox( x, y, w, 42, uiWavesAmber, 1, UI_WavesShopHover( x, y, w, 42 ) ? uiWavesWhite : uiWavesAmber );
+		UI_WavesShopText( x, y + 21, w, 18, uiWavesPanel, "BUY", ITEM_ALIGN_CENTER );
+		UI_WavesShopHit( x, y, w, 42, WAVES_HIT_BUY, index );
+	}
+	else {
+		text = maxed ? ( item->numLevels > 1 ? "MAX LEVEL" : "OWNED" ) : "NOT ENOUGH POINTS";
+		UI_WavesShopFill( x, y, w, 42, uiWavesDisabled );
+		UI_WavesShopText( x + 8, y + 21, w - 16, 18, uiWavesGreyDark, text, ITEM_ALIGN_CENTER );
+	}
+}
+
+static void UI_WavesShopDrawFooter( int role, const int *levels ) {
+	const float	y = 572, h = 36, mid = y + h * 0.5f;
+	int			items[MAX_WAVES_SHOP_ITEMS];
+	int			i, count = UI_WavesShopTabItems( role, 0, items );
+	float		x = 22, w, closeW = UI_WavesShopTextWidth( "CLOSE", 15 ) + 44;
+
+	UI_WavesShopFill( 0, 560, WAVES_SHOP_WIDTH, 1, uiWavesAmberDark );
+
+	for ( i = 0; i < count; i++ ) {
+		const wavesShopItem_t	*item = &uiWavesShop[items[i]];
+		const char				*price = va( "%i", BG_WavesItemPrice( item, levels[items[i]] ) );
+		float					titleW = UI_WavesShopTextWidth( item->title, 15 );
+		float					priceW = UI_WavesShopTextWidth( price, 15 );
+
+		w = titleW + 18 + priceW + 32;
+		UI_WavesShopBox( x, y, w, h, UI_WavesShopHover( x, y, w, h ) ? uiWavesCellBorder : uiWavesTab, 1, uiWavesAmber );
+		UI_WavesShopText( x + 16, mid, 0, 15, uiWavesText, item->title, ITEM_ALIGN_LEFT );
+		UI_WavesShopFill( x + 16 + titleW + 8, mid - 1, 3, 3, uiWavesText );
+		UI_WavesShopText( x + 16 + titleW + 18, mid, 0, 15, UI_WavesShopCanBuy( items[i], levels[items[i]] ) ? uiWavesText : uiWavesRed, price, ITEM_ALIGN_LEFT );
+		UI_WavesShopHit( x, y, w, h, WAVES_HIT_QUICK, items[i] );
+		x += w + 10;
+	}
+
+	x = WAVES_SHOP_WIDTH - 22 - closeW;
+	UI_WavesShopText( x - 310, mid, 300, 13, uiWavesGrey, "Double click to buy", ITEM_ALIGN_RIGHT );
+	UI_WavesShopBox( x, y, closeW, h, UI_WavesShopHover( x, y, closeW, h ) ? uiWavesTab : NULL, 1, uiWavesAmber );
+	UI_WavesShopText( x, mid, closeW, 15, uiWavesAmber, "CLOSE", ITEM_ALIGN_CENTER );
+	UI_WavesShopHit( x, y, closeW, h, WAVES_HIT_CLOSE, 0 );
+}
+
+static void UI_WavesShopDraw( rectDef_t *rect, int font ) {
+	int levels[MAX_WAVES_SHOP_ITEMS];
+	int role = UI_WavesShopInventory( levels );
+	int selected = UI_WavesShopSelected( role );
+
+	uiWavesShopX = rect->x;
+	uiWavesShopY = rect->y;
+	uiWavesShopFont = font;
+	uiWavesShopFade = 1.0f;
+	uiWavesShopHitCount = 0;
+
+	UI_WavesShopBox( 0, 0, WAVES_SHOP_WIDTH, WAVES_SHOP_HEIGHT, uiWavesPanel, 2, uiWavesAmber );
+	UI_WavesShopDrawHeader();
+	UI_WavesShopDrawTabs( role );
+	UI_WavesShopDrawGrid( role, levels, selected );
+	UI_WavesShopDrawDetail( levels, selected );
+	UI_WavesShopDrawFooter( role, levels );
+}
+
+static qboolean UI_WavesShopHandleKey( int key ) {
+	const wavesShopHit_t	*hit = NULL;
+	float					cx, cy;
+	int						i;
+
+	if ( key != A_MOUSE1 ) {
+		return qfalse;
+	}
+	cx = ( uiInfo.uiDC.cursorx - uiWavesShopX ) / WAVES_SHOP_UNIT;
+	cy = ( uiInfo.uiDC.cursory - uiWavesShopY ) / WAVES_SHOP_UNIT;
+	for ( i = 0; i < uiWavesShopHitCount; i++ ) {
+		if ( cx >= uiWavesShopHits[i].x && cx < uiWavesShopHits[i].x + uiWavesShopHits[i].w
+			&& cy >= uiWavesShopHits[i].y && cy < uiWavesShopHits[i].y + uiWavesShopHits[i].h ) {
+			hit = &uiWavesShopHits[i];
+			break;
+		}
+	}
+	if ( !hit ) {
+		return qfalse;
+	}
+
+	trap->S_StartLocalSound( uiWavesShopSound, CHAN_LOCAL_SOUND );
+	switch ( hit->type ) {
+	case WAVES_HIT_TAB:
+		uiWavesShopTab = hit->param;
+		uiWavesShopSel = -1;
+		break;
+	case WAVES_HIT_CELL:
+		if ( hit->param == uiWavesShopSel && uiInfo.uiDC.realTime - uiWavesShopClickTime < WAVES_SHOP_DOUBLECLICK ) {
+			UI_WavesShopBuy( hit->param );
+			uiWavesShopClickTime = 0;
+		}
+		else {
+			uiWavesShopSel = hit->param;
+			uiWavesShopClickTime = uiInfo.uiDC.realTime;
+		}
+		break;
+	case WAVES_HIT_BUY:
+	case WAVES_HIT_QUICK:
+		UI_WavesShopBuy( hit->param );
+		break;
+	case WAVES_HIT_CLOSE:
+		trap->Key_SetCatcher( trap->Key_GetCatcher() & ~KEYCATCH_UI );
+		trap->Key_ClearStates();
+		trap->Cvar_Set( "cl_paused", "0" );
+		Menus_CloseAll();
+		break;
+	}
+	return qtrue;
 }
 
 void UI_Load( void ) {
@@ -3296,6 +3831,9 @@ static void UI_OwnerDraw(float x, float y, float w, float h, float text_x, float
 
   switch (ownerDraw)
   {
+	case UI_WAVES_SHOP:
+		UI_WavesShopDraw( &rect, iMenuFont );
+		break;
     case UI_HANDICAP:
       UI_DrawHandicap(&rect, scale, color, textStyle, iMenuFont);
       break;
@@ -4459,6 +4997,8 @@ static qboolean UI_OwnerDrawHandleKey(int ownerDraw, int flags, float *special, 
 	int findex, iUse = 0;
 
   switch (ownerDraw) {
+	case UI_WAVES_SHOP:
+		return UI_WavesShopHandleKey( key );
     case UI_HANDICAP:
       return UI_Handicap_HandleKey(flags, special, key);
       break;
@@ -6481,8 +7021,6 @@ static void UI_RunMenuScript(char **args)
 			if (ui_netGametype.integer >= 0 && ui_netGametype.integer < uiInfo.numGameTypes) {
 				trap->Cmd_ExecuteText( EXEC_APPEND, va("callvote g_gametype %i\n",uiInfo.gameTypes[ui_netGametype.integer].gtEnum) );
 			}
-		} else if (Q_stricmp(name, "wavesBuy") == 0) {
-			UI_WavesShopBuy();
 		} else if (Q_stricmp(name, "wavesCharacterOpen") == 0) {
 			UI_WavesCharacterOpen();
 		} else if (Q_stricmp(name, "wavesChooseCharacter") == 0) {
@@ -8269,13 +8807,6 @@ static int UI_FeederCount(float feederID)
 		case FEEDER_SERVERS:
 			return uiInfo.serverStatus.numDisplayServers;
 
-		case FEEDER_WAVES_SHOP:
-		{
-			int visible[MAX_WAVES_SHOP_ITEMS], levels[MAX_WAVES_SHOP_ITEMS];
-
-			return UI_WavesShopVisible( visible, levels );
-		}
-
 		case FEEDER_WAVES_CHARACTERS:
 			return uiWavesCharCount[UI_WavesRole()];
 
@@ -8750,10 +9281,6 @@ static const char *UI_FeederItemText(float feederID, int index, int column,
 	{
 		return datapadMoveData[uiInfo.movesTitleIndex][index].title;
 	}
-	else if (feederID == FEEDER_WAVES_SHOP)
-	{
-		return UI_WavesShopItemText( index, column, handle1 );
-	}
 	else if (feederID == FEEDER_MOVES_TITLES)
 	{
 		return datapadMoveTitleData[index];
@@ -9177,10 +9704,6 @@ qboolean UI_FeederSelection(float feederFloat, int index, itemDef_t *item)
 				}
 			}
 		}
-	}
-	else if (feederID == FEEDER_WAVES_SHOP)
-	{
-		uiWavesShopSel = index;
 	}
 	else if (feederID == FEEDER_WAVES_CHARACTERS)
 	{

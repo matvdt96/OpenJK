@@ -1784,6 +1784,10 @@ qboolean BG_CanUseFPNow(int gametype, playerState_t *ps, int time, forcePowers_t
 #define WAVES_SHOP_FILE			"ext_data/waves_shop.txt"
 #define MAX_WAVES_SHOP_ITEMS	64
 #define MAX_WAVES_ITEM_LEVELS	3
+#define WAVES_BASE_HEALTH		100
+#define WAVES_HEALTH_STEP		25
+#define WAVES_BASE_SHIELD		100
+#define WAVES_SHIELD_STEP		25
 
 typedef enum {
 	WAVES_ROLE_NONE,
@@ -1811,8 +1815,10 @@ typedef struct wavesShopItem_s {
 	char	name[32];
 	char	title[64];
 	char	icon[MAX_QPATH];	// shop icon, empty = default for the type
+	char	desc[160];
 	int		role;		// WAVES_ROLE_NONE = both roles
 	int		type;		// wavesItemType_t
+	int		tab;		// shop tab, 0 = quick buy button
 	int		param;		// weapon or force power
 	int		amount;		// consumables: ammo given; upgrades: percent per level; health regen: health per second
 	int		baseLevel;	// level the force user starts with

@@ -36,9 +36,6 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #define WAVES_KILL_POINTS		60
 #define WAVES_BOSS_POINTS		500
 #define WAVES_ROUND_POINTS		100
-#define WAVES_HEALTH_STEP		25
-#define WAVES_SHIELD_STEP		25
-#define WAVES_BASE_SHIELD		100
 #define WAVES_REGEN_DELAY		5000
 
 extern gentity_t *NPC_SpawnTypeAt( vec3_t origin, float yaw, char *npc_type, char *targetname, qboolean isVehicle, team_t teamowner );
@@ -735,7 +732,7 @@ int G_WavesForceRegenTime( gentity_t *ent, int regenTime ) {
 }
 
 static int G_WavesMaxHealth( gentity_t *ent ) {
-	return 100 + WAVES_HEALTH_STEP * G_WavesTotalLevels( ent, WAVES_ITEM_MAXHEALTH );
+	return WAVES_BASE_HEALTH + WAVES_HEALTH_STEP * G_WavesTotalLevels( ent, WAVES_ITEM_MAXHEALTH );
 }
 
 static int G_WavesMaxShield( gentity_t *ent ) {

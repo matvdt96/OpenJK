@@ -3115,6 +3115,7 @@ static qboolean BG_WavesParseItem( const char **p, wavesShopItem_t *item ) {
 
 	memset( item, 0, sizeof( *item ) );
 	item->param = -1;
+	item->tab = 1;
 
 	while ( 1 ) {
 		Q_strncpyz( key, COM_ParseExt( p, qtrue ), sizeof( key ) );
@@ -3142,6 +3143,12 @@ static qboolean BG_WavesParseItem( const char **p, wavesShopItem_t *item ) {
 		}
 		else if ( !Q_stricmp( key, "icon" ) ) {
 			Q_strncpyz( item->icon, token, sizeof( item->icon ) );
+		}
+		else if ( !Q_stricmp( key, "desc" ) ) {
+			Q_strncpyz( item->desc, token, sizeof( item->desc ) );
+		}
+		else if ( !Q_stricmp( key, "tab" ) ) {
+			item->tab = atoi( token );
 		}
 		else if ( !Q_stricmp( key, "role" ) ) {
 			if ( !Q_stricmp( token, "force" ) )			item->role = WAVES_ROLE_FORCE;
