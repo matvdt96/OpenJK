@@ -782,13 +782,13 @@ static void G_WavesClampSaberStyle( gentity_t *ent ) {
 	if ( maxStyle < FORCE_LEVEL_1 ) {
 		maxStyle = FORCE_LEVEL_1;
 	}
-	if ( ps->fd.saberAnimLevel > maxStyle ) {
+	if ( ps->fd.saberAnimLevel > maxStyle && ps->fd.saberAnimLevel < SS_DUAL ) {
 		ps->fd.saberAnimLevel = maxStyle;
 	}
-	if ( ps->fd.saberDrawAnimLevel > maxStyle ) {
+	if ( ps->fd.saberDrawAnimLevel > maxStyle && ps->fd.saberDrawAnimLevel < SS_DUAL ) {
 		ps->fd.saberDrawAnimLevel = maxStyle;
 	}
-	if ( ps->fd.saberAnimLevelBase > maxStyle ) {
+	if ( ps->fd.saberAnimLevelBase > maxStyle && ps->fd.saberAnimLevelBase < SS_DUAL ) {
 		ps->fd.saberAnimLevelBase = maxStyle;
 	}
 }

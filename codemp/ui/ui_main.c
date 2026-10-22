@@ -1586,6 +1586,7 @@ static void UI_LoadWavesMenus( void ) {
 	trap->PC_LoadGlobalDefines( "ui/jamp/menudef.h" );
 	UI_ParseMenu( "ui/jamp/waves_role.menu" );
 	UI_ParseMenu( "ui/jamp/waves_character.menu" );
+	UI_ParseMenu( "ui/jamp/waves_saber.menu" );
 	UI_ParseMenu( "ui/jamp/waves_shop.menu" );
 	trap->PC_RemoveAllGlobalDefines();
 	uiWavesShopCount = BG_WavesLoadShop( uiWavesShop, MAX_WAVES_SHOP_ITEMS );
@@ -1667,6 +1668,20 @@ static void UI_WavesCharacterApply( void ) {
 	trap->Cvar_Set( "char_color_red", "255" );
 	trap->Cvar_Set( "char_color_green", "255" );
 	trap->Cvar_Set( "char_color_blue", "255" );
+}
+
+static void UI_WavesCharacterChoose( void ) {
+	UI_WavesCharacterApply();
+	if ( UI_WavesRole() == WAVES_ROLE_FORCE ) {
+		Menus_CloseByName( "waves_character" );
+		Menus_ActivateByName( "waves_saber" );
+		return;
+	}
+	trap->Cmd_ExecuteText( EXEC_APPEND, "team blue\n" );
+	trap->Key_SetCatcher( trap->Key_GetCatcher() & ~KEYCATCH_UI );
+	trap->Key_ClearStates();
+	trap->Cvar_Set( "cl_paused", "0" );
+	Menus_CloseAll();
 }
 
 static int UI_WavesShopInventory( int *levels ) {
@@ -6470,8 +6485,8 @@ static void UI_RunMenuScript(char **args)
 			UI_WavesShopBuy();
 		} else if (Q_stricmp(name, "wavesCharacterOpen") == 0) {
 			UI_WavesCharacterOpen();
-		} else if (Q_stricmp(name, "wavesSetCharacter") == 0) {
-			UI_WavesCharacterApply();
+		} else if (Q_stricmp(name, "wavesChooseCharacter") == 0) {
+			UI_WavesCharacterChoose();
 		} else if (Q_stricmp(name, "voteLeader") == 0) {
 			if (uiInfo.teamIndex >= 0 && uiInfo.teamIndex < uiInfo.myTeamCount) {
 				trap->Cmd_ExecuteText( EXEC_APPEND, va("callteamvote leader \"%s\"\n",uiInfo.teamNames[uiInfo.teamIndex]) );
