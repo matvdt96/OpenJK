@@ -1270,6 +1270,8 @@ void NPC_Begin (gentity_t *ent)
 
 gNPC_t *gNPCPtrs[MAX_GENTITIES];
 
+typedef char npcSlotFitsPool[(sizeof(gclient_t) + sizeof(gNPC_t) <= BG_POOL_NPC_SLOT_GAME) ? 1 : -1];
+
 gNPC_t *New_NPC_t(int entNum)
 {
 	gNPC_t *ptr;

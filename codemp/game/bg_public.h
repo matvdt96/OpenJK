@@ -1779,6 +1779,11 @@ qboolean BG_IsItemSelectable(playerState_t *ps, int item);
 qboolean BG_HasYsalamiri(int gametype, playerState_t *ps);
 qboolean BG_CanUseFPNow(int gametype, playerState_t *ps, int time, forcePowers_t power);
 
+// BG_Alloc room kept for the NPC structures of every entity slot, which are never freed:
+// gclient_t + gNPC_t on the server, clientInfo_t on the client
+#define BG_POOL_NPC_SLOT_GAME	10240
+#define BG_POOL_NPC_SLOT_CGAME	6400
+
 void *BG_Alloc ( int size );
 void *BG_AllocUnaligned ( int size );
 void *BG_TempAlloc( int size );

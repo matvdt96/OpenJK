@@ -3098,9 +3098,9 @@ int BG_ModelCache(const char *modelName, const char *skinName)
 }
 
 #if defined(_GAME)
-	#define MAX_POOL_SIZE	3000000 //1024000
+	#define MAX_POOL_SIZE	(3000000 + MAX_GENTITIES * BG_POOL_NPC_SLOT_GAME) //1024000
 #elif defined(_CGAME) //don't need as much for cgame stuff. 2mb will be fine.
-	#define MAX_POOL_SIZE	2048000
+	#define MAX_POOL_SIZE	(2048000 + MAX_GENTITIES * BG_POOL_NPC_SLOT_CGAME)
 #elif defined(UI_BUILD) //And for the ui the only thing we'll be using this for anyway is allocating anim data for g2 menu models
 	#define MAX_POOL_SIZE	512000
 #endif

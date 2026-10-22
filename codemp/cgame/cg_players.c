@@ -7958,6 +7958,8 @@ void CG_ForceFPLSPlayerModel(centity_t *cent, clientInfo_t *ci)
 //Remember to free this before game shutdown no matter what
 //and don't stomp over it, as it is dynamic memory from the
 //exe.
+typedef char npcClientFitsPool[(sizeof(clientInfo_t) <= BG_POOL_NPC_SLOT_CGAME) ? 1 : -1];
+
 void CG_CreateNPCClient(clientInfo_t **ci)
 {
 	//trap->TrueMalloc((void **)ci, sizeof(clientInfo_t));
