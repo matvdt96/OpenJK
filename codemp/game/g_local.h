@@ -1376,6 +1376,9 @@ void G_WavesRunFrame( void );
 void G_WavesKillAll( void );
 void G_WavesSetRound( int round );
 void G_WavesPrintStatus( void );
+qboolean G_WavesHoldSpawn( gentity_t *ent );
+void G_WavesMakeSpectator( gentity_t *ent );
+qboolean G_WavesSpawnNearTeammate( gentity_t *ent, vec3_t origin, vec3_t angles );
 
 //
 // g_mem.c

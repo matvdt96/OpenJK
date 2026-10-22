@@ -27,10 +27,15 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #define MAX_WAVE_ALIVE			48
 #define WAVES_ENEMY_TIME		500
 #define WAVES_SPAWN_TRIES		32
+#define WAVES_DEFEAT_TIME		6000
+#define WAVES_REVIVE_MIN_DIST	64
+#define WAVES_REVIVE_MAX_DIST	400
+#define WAVES_SPECTATE_FOREVER	0x7fffffff
 
 extern gentity_t *NPC_SpawnTypeAt( vec3_t origin, float yaw, char *npc_type, char *targetname, qboolean isVehicle, team_t teamowner );
 extern void NPC_Begin( gentity_t *ent );
 extern void G_SetEnemy( gentity_t *self, gentity_t *enemy );
+extern void ClientRespawn( gentity_t *ent );
 
 typedef struct waveNpc_s {
 	char	type[MAX_QPATH];
@@ -47,7 +52,9 @@ typedef struct waveGroup_s {
 typedef enum {
 	WAVES_WAITING,
 	WAVES_INTERMISSION,
-	WAVES_ACTIVE
+	WAVES_ACTIVE,
+	WAVES_DEFEAT,
+	WAVES_ENDED
 } wavesState_t;
 
 typedef struct wavesSettings_s {
@@ -241,6 +248,7 @@ static qboolean G_WavesPlayerAlive( gentity_t *ent ) {
 		&& ent->client->pers.connected == CON_CONNECTED
 		&& ent->client->sess.sessionTeam == TEAM_BLUE
 		&& !(ent->client->ps.pm_flags & PMF_FOLLOW)
+		&& ent->client->tempSpectate < level.time
 		&& ent->health > 0 );
 }
 
@@ -428,9 +436,55 @@ static int G_WavesNumPlayers( void ) {
 	return count;
 }
 
+static int G_WavesNumAlivePlayers( void ) {
+	int	i, count = 0;
+
+	for ( i = 0; i < level.maxclients; i++ ) {
+		if ( G_WavesPlayerAlive( &g_entities[i] ) ) {
+			count++;
+		}
+	}
+	return count;
+}
+
+static void G_WavesReviveAll( void ) {
+	int	i;
+
+	for ( i = 0; i < level.maxclients; i++ ) {
+		gentity_t *ent = &g_entities[i];
+
+		if ( !ent->inuse || !ent->client || ent->client->pers.connected != CON_CONNECTED
+			|| ent->client->sess.sessionTeam != TEAM_BLUE ) {
+			continue;
+		}
+
+		if ( ent->client->tempSpectate >= level.time || ent->health <= 0 ) {
+			ent->client->tempSpectate = 0;
+			ClientRespawn( ent );
+		}
+		else {
+			ent->health = ent->client->ps.stats[STAT_HEALTH] = ent->client->ps.stats[STAT_MAX_HEALTH];
+			ent->client->ps.fd.forcePower = ent->client->ps.fd.forcePowerMax;
+		}
+	}
+}
+
 static void G_WavesStartIntermission( int delay ) {
 	waves.state = WAVES_INTERMISSION;
 	waves.stateTime = level.time + delay;
+	G_WavesReviveAll();
+}
+
+static void G_WavesEndGame( void ) {
+	waves.state = WAVES_ENDED;
+
+	if ( trap->Cvar_VariableIntegerValue( "dedicated" ) ) {
+		trap->SendConsoleCommand( EXEC_APPEND, "map_restart 0\n" );
+	}
+	else {
+		trap->Cvar_Set( "ui_returnMenu", "createserver" );
+		trap->SendConsoleCommand( EXEC_APPEND, "disconnect\n" );
+	}
 }
 
 static void G_WavesStartRound( void ) {
@@ -468,6 +522,12 @@ void G_WavesRunFrame( void ) {
 		break;
 
 	case WAVES_ACTIVE:
+		if ( G_WavesNumPlayers() > 0 && !G_WavesNumAlivePlayers() ) {
+			trap->SendServerCommand( -1, va( "cp \"Defeat\nYou reached round %d\"", waves.round ) );
+			waves.state = WAVES_DEFEAT;
+			waves.stateTime = level.time + WAVES_DEFEAT_TIME;
+			break;
+		}
 		if ( waves.toSpawn > 0 && waves.numAlive < wavesSettings.maxAlive && level.time >= waves.nextSpawnTime ) {
 			G_WavesSpawnEnemy();
 			waves.nextSpawnTime = level.time + wavesSettings.spawnInterval;
@@ -481,7 +541,71 @@ void G_WavesRunFrame( void ) {
 			G_WavesStartIntermission( wavesSettings.intermission );
 		}
 		break;
+
+	case WAVES_DEFEAT:
+		if ( level.time >= waves.stateTime ) {
+			G_WavesEndGame();
+		}
+		break;
+
+	case WAVES_ENDED:
+		break;
 	}
+}
+
+qboolean G_WavesHoldSpawn( gentity_t *ent ) {
+	return ( level.gametype == GT_WAVES
+		&& (waves.state == WAVES_ACTIVE || waves.state == WAVES_DEFEAT || waves.state == WAVES_ENDED)
+		&& ent->client && ent->client->sess.sessionTeam == TEAM_BLUE );
+}
+
+void G_WavesMakeSpectator( gentity_t *ent ) {
+	gclient_t *client = ent->client;
+
+	client->tempSpectate = WAVES_SPECTATE_FOREVER;
+	ent->health = client->ps.stats[STAT_HEALTH] = 1;
+	ent->waterlevel = ent->watertype = 0;
+	client->ps.weapon = WP_NONE;
+	client->ps.stats[STAT_WEAPONS] = 0;
+	client->ps.stats[STAT_HOLDABLE_ITEMS] = 0;
+	client->ps.stats[STAT_HOLDABLE_ITEM] = 0;
+	ent->takedamage = qfalse;
+	trap->LinkEntity( (sharedEntity_t *)ent );
+}
+
+qboolean G_WavesSpawnNearTeammate( gentity_t *ent, vec3_t origin, vec3_t angles ) {
+	gentity_t	*mates[MAX_CLIENTS], *mate;
+	int			numMates = 0, numNodes = trap->Nav_GetNumNodes();
+	int			i, tries;
+	vec3_t		spot;
+	float		dist;
+	trace_t		tr;
+
+	for ( i = 0; i < level.maxclients; i++ ) {
+		if ( &g_entities[i] != ent && G_WavesPlayerAlive( &g_entities[i] ) ) {
+			mates[numMates++] = &g_entities[i];
+		}
+	}
+	if ( !numMates || numNodes <= 0 ) {
+		return qfalse;
+	}
+
+	mate = mates[Q_irand( 0, numMates - 1 )];
+	for ( tries = 0; tries < numNodes; tries++ ) {
+		trap->Nav_GetNodePosition( Q_irand( 0, numNodes - 1 ), spot );
+		dist = Distance( spot, mate->r.currentOrigin );
+		if ( dist < WAVES_REVIVE_MIN_DIST || dist > WAVES_REVIVE_MAX_DIST ) {
+			continue;
+		}
+		trap->Trace( &tr, mate->r.currentOrigin, NULL, NULL, spot, mate->s.number, MASK_SOLID, qfalse, 0, 0 );
+		if ( tr.fraction < 1.0f || !G_WavesSpotFree( spot ) ) {
+			continue;
+		}
+		VectorCopy( spot, origin );
+		VectorSet( angles, 0, mate->client->ps.viewangles[YAW], 0 );
+		return qtrue;
+	}
+	return qfalse;
 }
 
 void G_WavesKillAll( void ) {
@@ -504,7 +628,7 @@ void G_WavesSetRound( int round ) {
 }
 
 void G_WavesPrintStatus( void ) {
-	static const char *stateNames[] = { "waiting", "intermission", "active" };
+	static const char *stateNames[] = { "waiting", "intermission", "active", "defeat", "ended" };
 
 	Com_Printf( "Waves: round %d, %s, %d alive, %d to spawn, %d nav nodes\n",
 		waves.round, stateNames[waves.state], waves.numAlive, waves.toSpawn, trap->Nav_GetNumNodes() );

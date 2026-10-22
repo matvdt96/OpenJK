@@ -1222,6 +1222,12 @@ void SiegeRespawn(gentity_t *ent);
 void ClientRespawn( gentity_t *ent ) {
 	MaintainBodyQueue(ent);
 
+	if ( G_WavesHoldSpawn( ent ) ) {
+		trap->UnlinkEntity( (sharedEntity_t *)ent );
+		G_WavesMakeSpectator( ent );
+		return;
+	}
+
 	if (gEscaping || level.gametype == GT_POWERDUEL)
 	{
 		ent->client->sess.sessionTeam = TEAM_SPECTATOR;
@@ -3237,6 +3243,9 @@ void ClientSpawn(gentity_t *ent) {
 			}
 		}
 	}
+	if ( level.gametype == GT_WAVES ) {
+		G_WavesSpawnNearTeammate( ent, spawn_origin, spawn_angles );
+	}
 	client->pers.teamState.state = TEAM_ACTIVE;
 
 	// toggle the teleport bit so the client knows to not lerp
@@ -3844,6 +3853,10 @@ void ClientSpawn(gentity_t *ent) {
 	//rww - make sure client has a valid icarus instance
 	trap->ICARUS_FreeEnt( (sharedEntity_t *)ent );
 	trap->ICARUS_InitEnt( (sharedEntity_t *)ent );
+
+	if ( G_WavesHoldSpawn( ent ) ) {
+		G_WavesMakeSpectator( ent );
+	}
 }
 
 

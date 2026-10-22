@@ -926,6 +926,12 @@ void UI_SetActiveMenu( uiMenuCommand_t menu ) {
 
 				Menus_CloseAll();
 				Menus_ActivateByName("main");
+				trap->Cvar_VariableStringBuffer("ui_returnMenu", buf, sizeof(buf));
+				if (buf[0])
+				{
+					trap->Cvar_Set("ui_returnMenu", "");
+					Menus_ActivateByName(buf);
+				}
 				trap->Cvar_VariableStringBuffer("com_errorMessage", buf, sizeof(buf));
 
 				if (buf[0])
