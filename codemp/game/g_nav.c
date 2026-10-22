@@ -22,6 +22,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 
 #include "b_local.h"
 #include "g_nav.h"
+#include "ai_main.h"
 
 extern qboolean G_EntIsUnlockedDoor( int entityNum );
 extern qboolean G_EntIsDoor( int entityNum );
@@ -1270,7 +1271,7 @@ waypoint_getRadius
 -------------------------
 */
 
-unsigned int waypoint_getRadius( gentity_t *ent )
+static unsigned int waypoint_getRadiusAt( vec3_t origin )
 {
 	unsigned int	minDist = MAX_RADIUS_CHECK + 1; // (unsigned int) -1;
 	unsigned int	dist;
@@ -1278,13 +1279,18 @@ unsigned int waypoint_getRadius( gentity_t *ent )
 
 	for ( i = 0; i < YAW_ITERATIONS; i++ )
 	{
-		dist = waypoint_testDirection( ent->r.currentOrigin, ((360.0f/YAW_ITERATIONS) * i), minDist );
+		dist = waypoint_testDirection( origin, ((360.0f/YAW_ITERATIONS) * i), minDist );
 
 		if ( dist < minDist )
 			minDist = dist;
 	}
 
 	return minDist;
+}
+
+unsigned int waypoint_getRadius( gentity_t *ent )
+{
+	return waypoint_getRadiusAt( ent->r.currentOrigin );
 }
 
 /*QUAKED waypoint  (0.7 0.7 0) (-16 -16 -24) (16 16 32) SOLID_OK
@@ -1751,6 +1757,126 @@ int NAV_GetStoredWaypoint( char *targetname )
 		}
 	}
 	return -1;
+}
+
+#define BOTGRAPH_TRAIL_MAX_DIST	1024
+#define BOTGRAPH_LINK_DIST		256
+#define BOTGRAPH_LINK_MAX_RISE	64
+#define BOTGRAPH_FLOOR_DIST		64
+
+static qboolean NAV_BotGraphWalkable( vec3_t start, vec3_t end )
+{
+	vec3_t	mins, maxs, mid, below;
+	trace_t	tr;
+
+	VectorSet( mins, -15, -15, DEFAULT_MINS_2 + STEPSIZE );
+	VectorSet( maxs, 15, 15, DEFAULT_MAXS_2 );
+
+	trap->Trace( &tr, start, mins, maxs, end, ENTITYNUM_NONE, ( CONTENTS_SOLID | CONTENTS_MONSTERCLIP | CONTENTS_BOTCLIP ), qfalse, 0, 0 );
+	if ( tr.fraction < 1.0f || tr.startsolid || tr.allsolid )
+	{
+		return qfalse;
+	}
+
+	VectorAdd( start, end, mid );
+	VectorScale( mid, 0.5f, mid );
+	VectorCopy( mid, below );
+	below[2] += DEFAULT_MINS_2 - BOTGRAPH_FLOOR_DIST;
+
+	trap->Trace( &tr, mid, NULL, NULL, below, ENTITYNUM_NONE, ( CONTENTS_SOLID | CONTENTS_PLAYERCLIP ), qfalse, 0, 0 );
+	return ( tr.fraction < 1.0f );
+}
+
+qboolean NAV_LoadBotGraph( void )
+{
+	static int	navNode[MAX_WPARRAY_SIZE];
+	wpobject_t	*wp, *other;
+	int			i, j, n, nodes = 0, links = 0;
+
+	if ( !g_npcBotGraphNav.integer || trap->Nav_GetNumNodes() > 0 || gWPNum <= 0 )
+	{
+		return qfalse;
+	}
+
+	for ( i = 0; i < gWPNum; i++ )
+	{
+		wp = gWPArray[i];
+		navNode[i] = -1;
+
+		if ( !wp || !wp->inuse || (wp->flags & WPFLAG_JUMP) )
+		{
+			continue;
+		}
+
+		navNode[i] = trap->Nav_AddRawPoint( wp->origin, 0, waypoint_getRadiusAt( wp->origin ) );
+		nodes++;
+	}
+
+	if ( !nodes )
+	{
+		return qfalse;
+	}
+
+	for ( i = 0; i < gWPNum; i++ )
+	{
+		wp = gWPArray[i];
+
+		if ( navNode[i] == -1 )
+		{
+			continue;
+		}
+
+		if ( i + 1 < gWPNum && navNode[i + 1] != -1 )
+		{
+			other = gWPArray[i + 1];
+
+			if ( !other->forceJumpTo
+				&& !((wp->flags | other->flags) & (WPFLAG_ONEWAY_FWD | WPFLAG_ONEWAY_BACK))
+				&& Distance( wp->origin, other->origin ) <= BOTGRAPH_TRAIL_MAX_DIST )
+			{
+				trap->Nav_HardConnect( navNode[i], navNode[i + 1] );
+				links++;
+			}
+		}
+
+		for ( n = 0; n < wp->neighbornum; n++ )
+		{
+			j = wp->neighbors[n].num;
+
+			if ( j < 0 || j >= gWPNum || navNode[j] == -1 || wp->neighbors[n].forceJumpTo )
+			{
+				continue;
+			}
+
+			trap->Nav_HardConnect( navNode[i], navNode[j] );
+			links++;
+		}
+
+		for ( j = i + 1; j < gWPNum; j++ )
+		{
+			other = gWPArray[j];
+
+			if ( navNode[j] == -1 || j == i + 1 )
+			{
+				continue;
+			}
+			if ( fabs( wp->origin[2] - other->origin[2] ) > BOTGRAPH_LINK_MAX_RISE
+				|| DistanceSquared( wp->origin, other->origin ) > BOTGRAPH_LINK_DIST * BOTGRAPH_LINK_DIST )
+			{
+				continue;
+			}
+			if ( !NAV_BotGraphWalkable( wp->origin, other->origin ) )
+			{
+				continue;
+			}
+
+			trap->Nav_HardConnect( navNode[i], navNode[j] );
+			links++;
+		}
+	}
+
+	Com_Printf( "Navigation built from the bot route: %d nodes, %d links\n", nodes, links );
+	return qtrue;
 }
 
 void NAV_CalculatePaths( const char *filename, int checksum )

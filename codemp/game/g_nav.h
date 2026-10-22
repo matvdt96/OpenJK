@@ -81,6 +81,7 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 	extern	int	 NAVDEBUG_curGoal;
 
 	void NAV_Shutdown( void );
+	qboolean NAV_LoadBotGraph( void );
 	void NAV_CalculatePaths( const char *filename, int checksum );
 	void NAV_CalculateSquadPaths( const char *filename, int checksum );
 

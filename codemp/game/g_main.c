@@ -323,6 +323,10 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	trap->Cvar_Register( &ckSum, "sv_mapChecksum", "", CVAR_ROM );
 
 	navCalculatePaths	= ( trap->Nav_Load( mapname.string, ckSum.integer ) == qfalse );
+	if ( !navCalculatePaths && g_npcBotGraphNav.integer && !trap->Nav_GetNumNodes() )
+	{
+		navCalculatePaths = qtrue;
+	}
 
 	// parse the key/value pairs and spawn gentities
 	G_SpawnEntitiesFromString(qfalse);
@@ -2865,12 +2869,15 @@ void NAV_CheckCalcPaths( void )
 	{//first time we've ever loaded this map...
 		vmCvar_t	mapname;
 		vmCvar_t	ckSum;
+		qboolean	fromBotGraph;
 
 		trap->Cvar_Register( &mapname, "mapname", "", CVAR_SERVERINFO | CVAR_ROM );
 		trap->Cvar_Register( &ckSum, "sv_mapChecksum", "", CVAR_ROM );
 
 		//clear all the failed edges
 		trap->Nav_ClearAllFailedEdges();
+
+		fromBotGraph = NAV_LoadBotGraph();
 
 		//Calculate all paths
 		NAV_CalculatePaths( mapname.string, ckSum.integer );
@@ -2884,7 +2891,7 @@ void NAV_CheckCalcPaths( void )
 		}
 		else
 #endif
-		if ( trap->Nav_Save( mapname.string, ckSum.integer ) == qfalse )
+		if ( !fromBotGraph && trap->Nav_Save( mapname.string, ckSum.integer ) == qfalse )
 		{
 			Com_Printf("Unable to save navigations data for map \"%s\" (checksum:%d)\n", mapname.string, ckSum.integer );
 		}
