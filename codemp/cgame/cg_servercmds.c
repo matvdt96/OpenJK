@@ -136,6 +136,7 @@ void CG_ParseServerinfo( void ) {
 
 	cgs.debugMelee = atoi( Info_ValueForKey( info, "g_debugMelee" ) ); //trap->Cvar_GetHiddenVarValue("g_iknowkungfu");
 	cgs.stepSlideFix = atoi( Info_ValueForKey( info, "g_stepSlideFix" ) );
+	cgs.saberDirBuffer = atoi( Info_ValueForKey( info, "g_saberDirBuffer" ) );
 
 	cgs.noSpecMove = atoi( Info_ValueForKey( info, "g_noSpecMove" ) );
 

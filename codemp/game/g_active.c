@@ -2888,6 +2888,7 @@ void ClientThink_real( gentity_t *ent ) {
 	pmove.gametype = level.gametype;
 	pmove.debugMelee = g_debugMelee.integer;
 	pmove.stepSlideFix = g_stepSlideFix.integer;
+	pmove.saberDirBuffer = g_saberDirBuffer.integer;
 
 	pmove.noSpecMove = g_noSpecMove.integer;
 

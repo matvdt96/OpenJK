@@ -159,6 +159,7 @@ XCVAR_DEF( g_saberDebugPrint,			"0",			NULL,						CVAR_CHEAT,										qfalse )
 #endif
 XCVAR_DEF( g_saberDmgDelay_Idle,		"350",			NULL,						CVAR_ARCHIVE,									qtrue )
 XCVAR_DEF( g_saberDmgDelay_Wound,		"0",			NULL,						CVAR_ARCHIVE,									qtrue )
+XCVAR_DEF( g_saberDirBuffer,			"1",			NULL,						CVAR_SERVERINFO,								qtrue )
 XCVAR_DEF( g_saberDmgVelocityScale,		"0",			NULL,						CVAR_ARCHIVE,									qtrue )
 XCVAR_DEF( g_saberLockFactor,			"2",			NULL,						CVAR_ARCHIVE,									qtrue )
 XCVAR_DEF( g_saberLocking,				"1",			NULL,						CVAR_ARCHIVE,									qtrue )

@@ -2774,6 +2774,54 @@ qboolean PM_SwimmingAnim( int anim );
 int PM_SaberBounceForAttack( int move );
 qboolean BG_SuperBreakLoseAnim( int anim );
 qboolean BG_SuperBreakWinAnim( int anim );
+
+// Sideways attack direction pressed during a swing, kept for the next swing in userInt1-3 (networked, 1 bit each):
+// 0 = none, 1-3 = right with back/none/forward, 4-6 = left with back/none/forward
+static int PM_SaberDirBufferGet( void ) {
+	return (pm->ps->userInt1 & 1) | ((pm->ps->userInt2 & 1) << 1) | ((pm->ps->userInt3 & 1) << 2);
+}
+
+static void PM_SaberDirBufferSet( int code ) {
+	pm->ps->userInt1 = code & 1;
+	pm->ps->userInt2 = (code >> 1) & 1;
+	pm->ps->userInt3 = (code >> 2) & 1;
+}
+
+static void PM_SaberDirBufferUpdate( int curmove ) {
+	int vertical;
+
+	if ( !pm->saberDirBuffer || pm->ps->clientNum >= MAX_CLIENTS ) {
+		return;
+	}
+	if ( curmove == LS_READY && pm->ps->weaponTime <= 0 ) {
+		PM_SaberDirBufferSet( 0 );
+	}
+	else if ( pm->cmd.rightmove ) {
+		vertical = pm->cmd.forwardmove > 0 ? 2 : pm->cmd.forwardmove < 0 ? 0 : 1;
+		PM_SaberDirBufferSet( (pm->cmd.rightmove > 0 ? 1 : 4) + vertical );
+	}
+}
+
+static saberMoveName_t PM_SaberAttackForBufferedMovement( saberMoveName_t curmove ) {
+	saberMoveName_t	newmove;
+	int				code = PM_SaberDirBufferGet();
+	signed char		rightmove = pm->cmd.rightmove, forwardmove = pm->cmd.forwardmove;
+
+	if ( !pm->saberDirBuffer || pm->ps->clientNum >= MAX_CLIENTS || !code || pm->cmd.rightmove || pm->cmd.upmove > 0 ) {
+		PM_SaberDirBufferSet( 0 );
+		return PM_SaberAttackForMovement( curmove );
+	}
+	pm->cmd.rightmove = code <= 3 ? 127 : -127;
+	if ( !pm->cmd.forwardmove ) {
+		pm->cmd.forwardmove = ( (code - 1) % 3 ) == 2 ? 127 : ( (code - 1) % 3 ) == 0 ? -127 : 0;
+	}
+	newmove = PM_SaberAttackForMovement( curmove );
+	pm->cmd.rightmove = rightmove;
+	pm->cmd.forwardmove = forwardmove;
+	PM_SaberDirBufferSet( 0 );
+	return newmove;
+}
+
 void PM_WeaponLightsaber(void)
 {
 	int			addTime;
@@ -2781,6 +2829,8 @@ void PM_WeaponLightsaber(void)
 	int			anim=-1, curmove, newmove=LS_NONE;
 
 	qboolean checkOnlyWeap = qfalse;
+
+	PM_SaberDirBufferUpdate( pm->ps->saberMove );
 
 	if ( PM_InKnockDown( pm->ps ) || BG_InRoll( pm->ps, pm->ps->legsAnim ))
 	{//in knockdown
@@ -3636,7 +3686,7 @@ weapChecks:
 						newmove = saberMoveData[curmove].chain_idle;
 					}
 					else */
-					newmove = PM_SaberAttackForMovement( curmove );
+					newmove = PM_SaberAttackForBufferedMovement( curmove );
 					if ( (PM_SaberInBounce( curmove )||PM_SaberInBrokenParry( curmove ))
 						&& saberMoveData[newmove].startQuad == saberMoveData[curmove].endQuad )
 					{//this attack would be a repeat of the last (which was blocked), so don't actually use it, use the default chain attack for this bounce

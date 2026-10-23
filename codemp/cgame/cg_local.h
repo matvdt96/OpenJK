@@ -1552,6 +1552,7 @@ typedef struct cgs_s {
 	gametype_t		gametype;
 	int				debugMelee;
 	int				stepSlideFix;
+	int				saberDirBuffer;
 	int				noSpecMove;
 	int				dmflags;
 	int				fraglimit;

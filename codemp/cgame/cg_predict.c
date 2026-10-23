@@ -1245,6 +1245,7 @@ void CG_PredictPlayerState( void ) {
 
 		cg_pmove.debugMelee = cgs.debugMelee;
 		cg_pmove.stepSlideFix = cgs.stepSlideFix;
+		cg_pmove.saberDirBuffer = cgs.saberDirBuffer;
 		cg_pmove.noSpecMove = cgs.noSpecMove;
 
 		cg_pmove.nonHumanoid = (pEnt->localAnimIndex > 0);
