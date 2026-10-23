@@ -1793,6 +1793,7 @@ static void CG_DrawHudWaves( void )
 static void CG_DrawHudBars( void )
 {
 	static float shownHealth, shownArmor, shownForce;
+	static int lastArmor, armorRiseTime;
 	const playerState_t *ps = &cg.snap->ps;
 	const float scale = CG_HudBarScale();
 	const float healthH = HUDBAR_HEALTH_H * scale, forceH = HUDBAR_FORCE_H * scale;
@@ -1800,7 +1801,24 @@ static void CG_DrawHudBars( void )
 	const float length = HUDBAR_LENGTH * scale * CG_HudBarAspect(), armorLength = HUDBAR_ARMOR_LENGTH * scale * CG_HudBarAspect();
 	const int maxHealth = Q_max( 1, ps->stats[STAT_MAX_HEALTH] );
 	int health, armor, force;
+	vec4_t armorColor;
 	vec4_t forceColor;
+
+	// pulse the armor bar while it recharges
+	if ( ps->stats[STAT_ARMOR] > lastArmor )
+	{
+		armorRiseTime = cg.time;
+	}
+	lastArmor = ps->stats[STAT_ARMOR];
+	VectorCopy4( hudBarArmorColor, armorColor );
+	if ( cg.time - armorRiseTime < 1200 )
+	{
+		const float pulse = 0.35f * ( 0.5f + 0.5f * sinf( ( cg.time - armorRiseTime ) * ( 2.0f * M_PI / 600.0f ) ) );
+
+		armorColor[0] += ( 1.0f - armorColor[0] ) * pulse;
+		armorColor[1] += ( 1.0f - armorColor[1] ) * pulse;
+		armorColor[2] += ( 1.0f - armorColor[2] ) * pulse;
+	}
 
 	shownHealth = CG_HudBarFollow( shownHealth, Q_max( 0, ps->stats[STAT_HEALTH] ) );
 	shownArmor = CG_HudBarFollow( shownArmor, Q_max( 0, ps->stats[STAT_ARMOR] ) );
@@ -1814,7 +1832,7 @@ static void CG_DrawHudBars( void )
 
 	CG_DrawHudBar( SCREEN_WIDTH - HUDBAR_X - armorLength, SCREEN_HEIGHT - HUDBAR_BOTTOM - healthH, armorLength, healthH,
 		Com_Clamp( 0.0f, 1.0f, shownArmor / maxHealth ), armor,
-		cgs.media.hudBarArmorTrack, cgs.media.hudBarArmorFill, hudBarArmorColor, hudBarArmorColor, 0.62f, 0.38f );
+		cgs.media.hudBarArmorTrack, cgs.media.hudBarArmorFill, armorColor, hudBarArmorColor, 0.62f, 0.38f );
 
 	if ( ps->weapon == WP_SABER )
 	{

@@ -1817,6 +1817,10 @@ static qboolean UI_WavesShopStat( const wavesShopItem_t *item, const char **labe
 		*label = "HEALTH REGENERATION";
 		*format = "%i/s";
 		return qtrue;
+	case WAVES_ITEM_SHIELDREGEN:
+		*label = "SHIELD REGENERATION";
+		*format = "%i/s";
+		return qtrue;
 	default:
 		return qfalse;
 	}

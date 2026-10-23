@@ -86,6 +86,8 @@ typedef struct wavesSettings_s {
 	int		bossHealthGrowth;
 	int		refillAlive;
 	int		blockCost;
+	int		shieldRegen;
+	int		shieldRegenDelay;
 } wavesSettings_t;
 
 typedef struct waveEnemy_s {
@@ -139,6 +141,8 @@ static void G_WavesDefaultSettings( void ) {
 	wavesSettings.bossHealthGrowth = 25;
 	wavesSettings.refillAlive = 0;
 	wavesSettings.blockCost = 0;
+	wavesSettings.shieldRegen = 0;
+	wavesSettings.shieldRegenDelay = 3;
 }
 
 static qboolean G_WavesParseInt( const char **p, int *out ) {
@@ -185,6 +189,8 @@ static void G_WavesParseSettings( const char **p ) {
 		else if ( !Q_stricmp( token, "bossHealthGrowth" ) )		wavesSettings.bossHealthGrowth = value;
 		else if ( !Q_stricmp( token, "refillAlive" ) )			wavesSettings.refillAlive = value;
 		else if ( !Q_stricmp( token, "blockCost" ) )			wavesSettings.blockCost = value;
+		else if ( !Q_stricmp( token, "shieldRegen" ) )			wavesSettings.shieldRegen = value;
+		else if ( !Q_stricmp( token, "shieldRegenDelay" ) )		wavesSettings.shieldRegenDelay = value;
 		else Com_Printf( S_COLOR_YELLOW "%s: unknown setting '%s'\n", WAVES_FILE, token );
 	}
 }
@@ -1346,6 +1352,12 @@ void G_WavesTimerActions( gentity_t *ent ) {
 
 	if ( client->ps.stats[STAT_ARMOR] > G_WavesMaxShield( ent ) ) {
 		client->ps.stats[STAT_ARMOR]--;
+	}
+	else if ( G_WavesPlayerAlive( ent ) && level.time - client->pers.waves.lastHurtTime >= wavesSettings.shieldRegenDelay * 1000 ) {
+		regen = G_WavesBonus( ent, WAVES_ITEM_SHIELDREGEN ) + ( client->pers.waves.role == WAVES_ROLE_GUNNER ? wavesSettings.shieldRegen : 0 );
+		if ( regen > 0 ) {
+			client->ps.stats[STAT_ARMOR] = Q_min( client->ps.stats[STAT_ARMOR] + regen, G_WavesMaxShield( ent ) );
+		}
 	}
 }
 
