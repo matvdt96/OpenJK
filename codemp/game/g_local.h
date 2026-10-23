@@ -720,6 +720,11 @@ struct gclient_s {
 
 	int			forcePowerSoundDebounce; //if > level.time, don't do certain sound events again (drain sound, absorb sound, etc)
 
+	int			forceHealPending;	// health Force Heal still has to give, spread over g_forceHealTime
+	float		forceHealRate;		// health per second
+	float		forceHealFrac;
+	int			forceHealLastTime;
+
 	char		modelname[MAX_QPATH];
 
 	qboolean	fjDidJump;
