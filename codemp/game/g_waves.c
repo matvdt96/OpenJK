@@ -771,6 +771,10 @@ static int G_WavesMaxShield( gentity_t *ent ) {
 	return WAVES_BASE_SHIELD + WAVES_SHIELD_STEP * G_WavesTotalLevels( ent, WAVES_ITEM_MAXSHIELD );
 }
 
+static int G_WavesMaxForce( gentity_t *ent ) {
+	return WAVES_BASE_FORCE + WAVES_FORCE_STEP * G_WavesTotalLevels( ent, WAVES_ITEM_MAXFORCE );
+}
+
 static void G_WavesSendInventory( gentity_t *ent ) {
 	char	buf[MAX_STRING_CHARS];
 	int		i;
@@ -924,6 +928,8 @@ void G_WavesApplyLoadout( gentity_t *ent ) {
 	if ( client->ps.stats[STAT_ARMOR] > maxShield ) {
 		client->ps.stats[STAT_ARMOR] = maxShield;
 	}
+	client->ps.fd.forcePowerMax = role == WAVES_ROLE_FORCE ? G_WavesMaxForce( ent ) : WAVES_BASE_FORCE;
+	client->ps.fd.forcePower = client->ps.fd.forcePowerMax;
 
 	G_WavesSendInventory( ent );
 }
@@ -1032,6 +1038,10 @@ static void G_WavesApplyItem( gentity_t *ent, const wavesShopItem_t *item, int i
 		break;
 	case WAVES_ITEM_SHIELD:
 		client->ps.stats[STAT_ARMOR] = G_WavesMaxShield( ent );
+		break;
+	case WAVES_ITEM_MAXFORCE:
+		client->ps.fd.forcePowerMax = G_WavesMaxForce( ent );
+		client->ps.fd.forcePower = Q_min( client->ps.fd.forcePower + WAVES_FORCE_STEP, client->ps.fd.forcePowerMax );
 		break;
 	default:
 		break;

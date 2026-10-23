@@ -1788,6 +1788,8 @@ qboolean BG_CanUseFPNow(int gametype, playerState_t *ps, int time, forcePowers_t
 #define WAVES_HEALTH_STEP		25
 #define WAVES_BASE_SHIELD		100
 #define WAVES_SHIELD_STEP		25
+#define WAVES_BASE_FORCE		100
+#define WAVES_FORCE_STEP		25
 
 typedef enum {
 	WAVES_ROLE_NONE,
@@ -1808,7 +1810,8 @@ typedef enum {
 	WAVES_ITEM_FORCEDAMAGE,
 	WAVES_ITEM_MAXAMMO,
 	WAVES_ITEM_HEALTHREGEN,
-	WAVES_ITEM_FORCEREGEN
+	WAVES_ITEM_FORCEREGEN,
+	WAVES_ITEM_MAXFORCE
 } wavesItemType_t;
 
 typedef struct wavesShopItem_s {

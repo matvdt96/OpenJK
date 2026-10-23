@@ -1811,6 +1811,12 @@ static qboolean UI_WavesShopStat( const wavesShopItem_t *item, const char **labe
 		*base = WAVES_BASE_SHIELD;
 		*step = WAVES_SHIELD_STEP;
 		return qtrue;
+	case WAVES_ITEM_MAXFORCE:
+		*label = "MAX FORCE";
+		*format = "%i";
+		*base = WAVES_BASE_FORCE;
+		*step = WAVES_FORCE_STEP;
+		return qtrue;
 	case WAVES_ITEM_HEALTHREGEN:
 		*label = "HEALTH REGENERATION";
 		*format = "%i/s";
