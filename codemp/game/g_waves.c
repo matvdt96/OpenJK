@@ -1123,9 +1123,24 @@ void G_WavesInit( void ) {
 
 static void G_WavesUpdateConfigstring( void ) {
 	const char	*s;
+	gentity_t	*boss = NULL;
+	int			i, bossHealth = 0;
 
-	s = va( "%i %i %i %i", waves.round, waves.state, waves.numAlive + waves.toSpawn + (waves.bossPending ? 1 : 0),
-		waves.state == WAVES_INTERMISSION ? waves.stateTime : 0 );
+	for ( i = 0; i < waves.numAlive; i++ ) {
+		if ( waves.alive[i].boss && g_entities[waves.alive[i].num].inuse && g_entities[waves.alive[i].num].client ) {
+			boss = &g_entities[waves.alive[i].num];
+			bossHealth = Q_max( 0, boss->health ) * 200 / Q_max( 1, boss->client->ps.stats[STAT_MAX_HEALTH] );
+			if ( boss->health > 0 && !bossHealth ) {
+				bossHealth = 1;
+			}
+			break;
+		}
+	}
+
+	// boss health in half percents, so the string changes at most 200 times during a fight
+	s = va( "%i %i %i %i %i %i %s", waves.round, waves.state, waves.numAlive + waves.toSpawn + (waves.bossPending ? 1 : 0),
+		waves.state == WAVES_INTERMISSION ? waves.stateTime : 0, boss ? boss->s.number : -1, bossHealth,
+		boss && boss->NPC_type ? boss->NPC_type : "-" );
 	if ( strcmp( s, wavesConfigstring ) ) {
 		Q_strncpyz( wavesConfigstring, s, sizeof( wavesConfigstring ) );
 		trap->SetConfigstring( CS_WAVES, s );

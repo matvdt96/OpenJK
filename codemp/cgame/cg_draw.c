@@ -1538,6 +1538,259 @@ static void CG_DrawHudAmmo( float right, float bottom, float h )
 		name, hudBarAmmoNameColor, font, -1, scale );
 }
 
+#define HUDWAVES_UNIT			( 480.0f / 720.0f / 1.3f )
+#define HUDWAVES_MARGIN_X		40.0f
+#define HUDWAVES_MARGIN_Y		30.0f
+#define HUDWAVES_COLUMN_W		180.0f
+#define HUDWAVES_PILL_H			32.0f
+#define HUDWAVES_SPACING		10.0f
+#define HUDWAVES_RADAR			180.0f
+#define HUDWAVES_BOSS_W			500.0f
+#define HUDWAVES_BOSS_H			30.0f
+#define HUDWAVES_BOSS_Y			52.0f
+#define HUDWAVES_GAIN_TIME		2000
+
+static float hudUpperRightY;
+
+static const vec4_t hudWavesPanelColor = { 0.07f, 0.086f, 0.11f, 0.6f };
+static const vec4_t hudWavesRadarColor = { 0.07f, 0.086f, 0.11f, 0.62f };
+static const vec4_t hudWavesRedColor = { 0.824f, 0.227f, 0.196f, 1.0f };
+static const vec4_t hudWavesAllyColor = { 0.247f, 0.663f, 0.91f, 1.0f };
+static const vec4_t hudWavesTrailColor = { 1.0f, 1.0f, 1.0f, 0.7f };
+
+// Rajdhani text, size is the font size in virtual units, y the vertical center; returns the width
+static float CG_HudText( float x, float y, float size, const vec4_t color, const char *text, int align )
+{
+	const qhandle_t font = CG_HudBarFont();
+	float scale, width;
+
+	if ( !font )
+	{
+		return 0.0f;
+	}
+	scale = size / Q_max( 1, trap->R_Font_HeightPixels( font, 1.0f ) );
+	width = trap->R_Font_StrLenPixels( text, font, scale );
+	if ( align == ITEM_ALIGN_CENTER )
+	{
+		x -= width * 0.5f;
+	}
+	else if ( align == ITEM_ALIGN_RIGHT )
+	{
+		x -= width;
+	}
+	trap->R_Font_DrawString( x, y - size * 0.5f, text, color, font, -1, scale );
+	return width;
+}
+
+// Number with the bar digits, h is the font size; returns the width
+static float CG_HudDigits( float x, float y, float h, const vec4_t color, const char *text, qboolean draw )
+{
+	const float dw = h * HUDBAR_DIGIT_ASPECT * CG_HudBarAspect();
+	int i;
+
+	for ( i = 0; draw && text[i]; i++ )
+	{
+		if ( text[i] >= '0' && text[i] <= '9' )
+		{
+			CG_DrawHudBarDigit( x + dw * i, y - h * 0.5f, dw, h, text[i] - '0', 0.0f, color );
+		}
+	}
+	return dw * strlen( text );
+}
+
+// Credits for the shop in a pill, with the last gain shown beside it for a while
+static void CG_DrawHudCredits( float cx, float top, float u )
+{
+	static int lastScore = -1, gain, gainTime;
+	const int score = cg.snap->ps.persistant[PERS_SCORE];
+	const float aspect = CG_HudBarAspect();
+	const float h = HUDWAVES_PILL_H * u, cy = top + h * 0.5f;
+	const float icon = 18.0f * u, numH = 22.0f * u;
+	const char *text = va( "%i", score );
+	const float w = ( 14.0f + 18.0f + 10.0f + 18.0f ) * u * aspect + CG_HudDigits( 0, 0, numH, colorWhite, text, qfalse );
+	const float x = cx - w * 0.5f;
+	vec4_t gainColor;
+
+	if ( lastScore >= 0 && score > lastScore )
+	{
+		gain = ( cg.time - gainTime < HUDWAVES_GAIN_TIME ? gain : 0 ) + score - lastScore;
+		gainTime = cg.time;
+	}
+	lastScore = score;
+
+	CG_DrawHudPill( x, top, w, h, hudWavesPanelColor );
+	trap->R_SetColor( hudBarHealthColor );
+	trap->R_DrawStretchPic( x + 14.0f * u * aspect, cy - icon * 0.5f, icon * aspect, icon, 0, 0, 1, 1, cgs.media.hudCredits );
+	CG_HudDigits( x + ( 14.0f + 18.0f + 10.0f ) * u * aspect, cy, numH, hudBarForceColor, text, qtrue );
+
+	if ( gain > 0 && cg.time - gainTime < HUDWAVES_GAIN_TIME )
+	{
+		VectorCopy4( hudBarHealthColor, gainColor );
+		gainColor[3] = Com_Clamp( 0.0f, 1.0f, ( HUDWAVES_GAIN_TIME - ( cg.time - gainTime ) ) / 500.0f );
+		CG_HudText( x + w + 8.0f * u * aspect, cy, 18.0f * u, gainColor, va( "+%i", gain ), ITEM_ALIGN_LEFT );
+	}
+	trap->R_SetColor( NULL );
+}
+
+// Radar: red sectors toward the enemies (brighter when more and closer), allies as blue dots, the view always up
+static void CG_DrawHudRadar( float cx, float top, float u )
+{
+	const float aspect = CG_HudBarAspect();
+	const float size = HUDWAVES_RADAR * u, cy = top + size * 0.5f;
+	const float range = Q_max( 100.0f, cg_hudRadarRange.value );
+	const float dot = 9.0f * u, arrow = 18.0f * u;
+	float heat[8] = { 0 };
+	vec4_t color;
+	int i;
+
+	trap->R_SetColor( hudWavesRadarColor );
+	trap->R_DrawStretchPic( cx - size * 0.49f * aspect, cy - size * 0.49f, size * 0.98f * aspect, size * 0.98f, 0, 0, 1, 1, cgs.media.hudBarCircle );
+
+	for ( i = 0; i < cg.snap->numEntities; i++ )
+	{
+		const entityState_t *es = &cg.snap->entities[i];
+		const centity_t *cent = &cg_entities[es->number];
+		vec3_t delta;
+		float dist, rel;
+
+		if ( ( es->eType != ET_NPC && es->eType != ET_PLAYER ) || ( es->eFlags & EF_DEAD ) || es->number == cg.snap->ps.clientNum )
+		{
+			continue;
+		}
+		VectorSubtract( cent->lerpOrigin, cg.predictedPlayerState.origin, delta );
+		dist = sqrtf( delta[0] * delta[0] + delta[1] * delta[1] );
+		if ( es->eType == ET_NPC && dist >= range )
+		{
+			continue;
+		}
+		rel = DEG2RAD( AngleNormalize360( cg.refdef.viewangles[YAW] - RAD2DEG( atan2f( delta[1], delta[0] ) ) ) );
+
+		if ( es->eType == ET_NPC )
+		{
+			const int sector = (int)( ( RAD2DEG( rel ) + 22.5f ) / 45.0f ) & 7;
+			heat[sector] = Q_min( 1.0f, heat[sector] + 1.0f - dist / range );
+		}
+		else
+		{
+			const float r = Q_min( dist / range, 1.0f ) * 84.0f * u;
+
+			trap->R_SetColor( hudWavesAllyColor );
+			trap->R_DrawStretchPic( cx + ( sinf( rel ) * r - dot * 0.5f ) * aspect, cy - cosf( rel ) * r - dot * 0.5f,
+				dot * aspect, dot, 0, 0, 1, 1, cgs.media.hudBarCircle );
+		}
+	}
+
+	for ( i = 0; i < 8; i++ )
+	{
+		if ( heat[i] <= 0.0f )
+		{
+			continue;
+		}
+		VectorCopy4( hudWavesRedColor, color );
+		color[3] = 0.25f + heat[i] * 0.6f;
+		trap->R_SetColor( color );
+		trap->R_DrawStretchPic( cx - size * 0.49f * aspect, cy - size * 0.49f, size * 0.98f * aspect, size * 0.98f,
+			( i & 3 ) * 0.25f, ( i >> 2 ) * 0.5f, ( ( i & 3 ) + 1 ) * 0.25f, ( ( i >> 2 ) + 1 ) * 0.5f, cgs.media.hudRadarSectors );
+	}
+
+	trap->R_SetColor( NULL );
+	trap->R_DrawStretchPic( cx - size * 0.5f * aspect, top, size * aspect, size, 0, 0, 1, 1, cgs.media.hudRadarRing );
+	trap->R_DrawStretchPic( cx - arrow * 0.5f * aspect, cy - arrow * 0.5f, arrow * aspect, arrow, 0, 0, 1, 1, cgs.media.hudRadarArrow );
+}
+
+// Enemies left in the round: a red disc with the count and a label
+static void CG_DrawHudEnemies( float cx, float top, float u, int enemies )
+{
+	const float aspect = CG_HudBarAspect();
+	const float h = HUDWAVES_PILL_H * u, cy = top + h * 0.5f, disc = 26.0f * u;
+	const char *label = enemies == 1 ? "ENEMY" : "ENEMIES";
+	const char *text = va( "%i", enemies );
+	const float labelW = CG_HudText( -1000.0f, -1000.0f, 18.0f * u, colorWhite, label, ITEM_ALIGN_LEFT );
+	const float w = ( 4.0f + 26.0f + 10.0f + 18.0f ) * u * aspect + labelW;
+	const float x = cx - w * 0.5f;
+	float numW;
+
+	CG_DrawHudPill( x, top, w, h, hudWavesPanelColor );
+	CG_DrawHudPill( x + 4.0f * u * aspect, cy - disc * 0.5f, disc * aspect, disc, hudWavesRedColor );
+	numW = CG_HudDigits( 0, 0, 17.0f * u, colorWhite, text, qfalse );
+	CG_HudDigits( x + ( 4.0f + 13.0f ) * u * aspect - numW * 0.5f, cy, 17.0f * u, hudBarForceColor, text, qtrue );
+	CG_HudText( x + ( 4.0f + 26.0f + 10.0f ) * u * aspect, cy, 18.0f * u, hudBarForceColor, label, ITEM_ALIGN_LEFT );
+	trap->R_SetColor( NULL );
+}
+
+// Boss health at the top center: red fill over a white trail of the health just lost, the boss name on top
+static void CG_DrawHudBoss( float u, int health, const char *type )
+{
+	static float trail;
+	static char lastType[64];
+	const float aspect = CG_HudBarAspect();
+	const float w = HUDWAVES_BOSS_W * u * aspect, h = HUDWAVES_BOSS_H * u;
+	const float x = ( SCREEN_WIDTH - w ) * 0.5f, y = HUDWAVES_BOSS_Y * u;
+	char name[64];
+	int i;
+
+	if ( Q_stricmp( lastType, type ) )
+	{
+		Q_strncpyz( lastType, type, sizeof( lastType ) );
+		trail = health;
+	}
+	trail = trail < health ? health : CG_HudBarFollow( trail, health );
+
+	Q_strncpyz( name, type, sizeof( name ) );
+	for ( i = 0; name[i]; i++ )
+	{
+		if ( name[i] == '_' )
+		{
+			name[i] = ' ';
+		}
+	}
+	Q_strupr( name );
+
+	CG_DrawHudPill( x, y, w, h, hudWavesPanelColor );
+	if ( trail > 0.0f )
+	{
+		CG_DrawHudPill( x, y, w * trail / 200.0f, h, hudWavesTrailColor );
+	}
+	if ( health > 0 )
+	{
+		CG_DrawHudPill( x, y, w * health / 200.0f, h, hudWavesRedColor );
+	}
+	CG_HudText( SCREEN_WIDTH * 0.5f, y + h * 0.5f, 20.0f * u, hudBarForceColor, name, ITEM_ALIGN_CENTER );
+	trap->R_SetColor( NULL );
+}
+
+static void CG_DrawHudWaves( void )
+{
+	const float u = HUDWAVES_UNIT * CG_HudBarScale();
+	const float cx = SCREEN_WIDTH - ( HUDWAVES_MARGIN_X + HUDWAVES_COLUMN_W * 0.5f ) * u * CG_HudBarAspect();
+	float y = Q_max( HUDWAVES_MARGIN_Y * u, hudUpperRightY + 4.0f );
+	int round, state, enemies, nextTime, bossNum = -1, bossHealth = 0;
+	char bossType[64] = "";
+
+	if ( cgs.gametype != GT_WAVES )
+	{
+		return;
+	}
+	if ( sscanf( CG_ConfigString( CS_WAVES ), "%i %i %i %i %i %i %63s", &round, &state, &enemies, &nextTime,
+		&bossNum, &bossHealth, bossType ) < 4 )
+	{
+		return;
+	}
+
+	CG_DrawHudCredits( cx, y, u );
+	y += ( HUDWAVES_PILL_H + HUDWAVES_SPACING ) * u;
+	CG_DrawHudRadar( cx, y, u );
+	y += ( HUDWAVES_RADAR + HUDWAVES_SPACING ) * u;
+	if ( state == 2 )
+	{
+		CG_DrawHudEnemies( cx, y, u, enemies );
+	}
+	if ( bossNum >= 0 && bossType[0] && bossType[0] != '-' )
+	{
+		CG_DrawHudBoss( u, bossHealth, bossType );
+	}
+}
+
 static void CG_DrawHudBars( void )
 {
 	static float shownHealth, shownArmor, shownForce;
@@ -1573,6 +1826,8 @@ static void CG_DrawHudBars( void )
 	{
 		CG_DrawHudAmmo( SCREEN_WIDTH - HUDBAR_X, SCREEN_HEIGHT - HUDBAR_BOTTOM - healthH - HUDBAR_GAP * scale, healthH );
 	}
+
+	CG_DrawHudWaves();
 
 	if ( !ps->fd.forcePowersKnown )
 	{
@@ -4375,6 +4630,12 @@ static void CG_DrawUpperRight( void ) {
 	if ( cg_drawTimer.integer ) {
 		y = CG_DrawTimer( y );
 	}
+	hudUpperRightY = y;
+
+	if ( cgs.gametype == GT_WAVES && cg_hudBars.integer ) {
+		CG_DrawPowerupIcons( y );
+		return;
+	}
 
 	if ( ( cgs.gametype >= GT_TEAM || cg.predictedPlayerState.m_iVehicleNum )
 		&& cg_drawRadar.integer )
@@ -6623,11 +6884,13 @@ static void CG_DrawWavesHud( void ) {
 	}
 	else {
 		CG_DrawWavesHudLine( va( "Round %i", round ), scale, &y );
-		if ( state == 2 ) {
+		if ( state == 2 && !cg_hudBars.integer ) {
 			CG_DrawWavesHudLine( va( "Enemies: %i", enemies ), smallScale, &y );
 		}
 	}
-	CG_DrawWavesHudLine( va( "Points: %i", cg.snap->ps.persistant[PERS_SCORE] ), smallScale, &y );
+	if ( !cg_hudBars.integer ) {
+		CG_DrawWavesHudLine( va( "Points: %i", cg.snap->ps.persistant[PERS_SCORE] ), smallScale, &y );
+	}
 }
 
 static void CG_DrawNameplates( void ) {
