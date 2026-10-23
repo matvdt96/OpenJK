@@ -1399,6 +1399,7 @@ void G_WavesTimerActions( gentity_t *ent );
 void G_WavesEnemyDamaged( gentity_t *targ, gentity_t *attacker );
 void G_WavesEnemyKilled( gentity_t *self, gentity_t *attacker );
 void G_WavesApplyLoadout( gentity_t *ent );
+void G_WavesUpdateSabers( gentity_t *ent, const char *userinfo );
 void G_WavesSaveConsumables( gentity_t *ent );
 void G_WavesSetRole( gentity_t *ent, const char *name );
 void G_WavesBuy( gentity_t *ent, const char *name );

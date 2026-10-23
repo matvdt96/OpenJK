@@ -2281,6 +2281,9 @@ qboolean ClientUserinfoChanged( int clientNum ) {
 		G_SetSaber( ent, 0, Info_ValueForKey( userinfo, "saber1" ), qfalse );
 		G_SetSaber( ent, 1, Info_ValueForKey( userinfo, "saber2" ), qfalse );
 	}
+	else if ( level.gametype == GT_WAVES ) {
+		G_WavesUpdateSabers( ent, userinfo );
+	}
 
 	// set max health
 	if ( level.gametype == GT_SIEGE && client->siegeClass != -1 ) {

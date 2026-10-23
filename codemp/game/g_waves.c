@@ -84,6 +84,7 @@ typedef struct wavesSettings_s {
 	int		bossEvery;
 	int		bossHealth;
 	int		bossHealthGrowth;
+	int		refillAlive;
 } wavesSettings_t;
 
 typedef struct waveEnemy_s {
@@ -135,6 +136,7 @@ static void G_WavesDefaultSettings( void ) {
 	wavesSettings.bossEvery = 4;
 	wavesSettings.bossHealth = 5;
 	wavesSettings.bossHealthGrowth = 25;
+	wavesSettings.refillAlive = 0;
 }
 
 static qboolean G_WavesParseInt( const char **p, int *out ) {
@@ -179,6 +181,7 @@ static void G_WavesParseSettings( const char **p ) {
 		else if ( !Q_stricmp( token, "bossEvery" ) )			wavesSettings.bossEvery = value;
 		else if ( !Q_stricmp( token, "bossHealth" ) )			wavesSettings.bossHealth = value;
 		else if ( !Q_stricmp( token, "bossHealthGrowth" ) )		wavesSettings.bossHealthGrowth = value;
+		else if ( !Q_stricmp( token, "refillAlive" ) )			wavesSettings.refillAlive = value;
 		else Com_Printf( S_COLOR_YELLOW "%s: unknown setting '%s'\n", WAVES_FILE, token );
 	}
 }
@@ -615,7 +618,7 @@ static void G_WavesReviveAll( void ) {
 			ent->client->tempSpectate = 0;
 			ClientRespawn( ent );
 		}
-		else {
+		else if ( wavesSettings.refillAlive ) {
 			ent->health = ent->client->ps.stats[STAT_HEALTH] = ent->client->ps.stats[STAT_MAX_HEALTH];
 			ent->client->ps.fd.forcePower = ent->client->ps.fd.forcePowerMax;
 		}
@@ -816,6 +819,53 @@ static void G_WavesClampSaberStyle( gentity_t *ent ) {
 	}
 	if ( ps->fd.saberAnimLevelBase > maxStyle && ps->fd.saberAnimLevelBase < SS_DUAL ) {
 		ps->fd.saberAnimLevelBase = maxStyle;
+	}
+}
+
+qboolean G_SetSaber( gentity_t *ent, int saberNum, char *saberName, qboolean siegeOverride );
+qboolean G_SaberModelSetup( gentity_t *ent );
+
+// The saber menu sets the sabers and joins in the same frame, so the new sabers reach the server after the spawn:
+// a living force user gets them at once instead of at the next respawn
+void G_WavesUpdateSabers( gentity_t *ent, const char *userinfo ) {
+	gclient_t	*client = ent->client;
+	saberInfo_t	wanted[MAX_SABERS];
+	char		saber1[MAX_QPATH], saber2[MAX_QPATH];
+	int			i;
+
+	if ( !G_WavesPlayerAlive( ent ) || client->pers.waves.role == WAVES_ROLE_GUNNER ) {
+		return;
+	}
+
+	Q_strncpyz( saber1, Info_ValueForKey( userinfo, "saber1" ), sizeof( saber1 ) );
+	Q_strncpyz( saber2, Info_ValueForKey( userinfo, "saber2" ), sizeof( saber2 ) );
+	memcpy( wanted, client->saber, sizeof( wanted ) );
+	WP_SetSaber( ent->s.number, wanted, 0, saber1 );
+	WP_SetSaber( ent->s.number, wanted, 1, saber2 );
+	for ( i = 0; i < MAX_SABERS; i++ ) {
+		if ( Q_stricmp( wanted[i].name, client->saber[i].name ) || !wanted[i].model[0] != !client->saber[i].model[0] ) {
+			break;
+		}
+	}
+	if ( i == MAX_SABERS ) {
+		return;
+	}
+
+	client->ps.saberHolstered = 0;
+	G_SetSaber( ent, 0, saber1, qfalse );
+	G_SetSaber( ent, 1, saber2, qfalse );
+	G_SaberModelSetup( ent );
+
+	if ( client->saber[0].model[0] && client->saber[1].model[0] ) {
+		client->ps.fd.saberAnimLevelBase = client->ps.fd.saberAnimLevel = client->ps.fd.saberDrawAnimLevel = SS_DUAL;
+	}
+	else if ( client->saber[0].saberFlags & SFL_TWO_HANDED ) {
+		client->ps.fd.saberAnimLevel = client->ps.fd.saberDrawAnimLevel = SS_STAFF;
+	}
+	else {
+		client->sess.saberLevel = Com_Clampi( SS_FAST, SS_STRONG, client->sess.saberLevel );
+		client->ps.fd.saberAnimLevelBase = client->ps.fd.saberAnimLevel = client->ps.fd.saberDrawAnimLevel = client->sess.saberLevel;
+		G_WavesClampSaberStyle( ent );
 	}
 }
 
