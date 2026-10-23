@@ -52,6 +52,7 @@ typedef struct waveNpc_s {
 typedef struct waveGroup_s {
 	int			fromRound;
 	int			toRound;
+	int			maxAlive;	// 0 = no limit
 	int			numNpcs;
 	waveNpc_t	npcs[MAX_WAVE_GROUP_NPCS];
 } waveGroup_t;
@@ -90,6 +91,7 @@ typedef struct waveEnemy_s {
 	float		healthScale;
 	qboolean	scaled;
 	qboolean	boss;
+	int			group;		// index in waveGroups, -1 = boss
 } waveEnemy_t;
 
 static wavesSettings_t	wavesSettings;
@@ -197,6 +199,9 @@ static void G_WavesParseGroup( const char **p, waveGroup_t *group ) {
 		if ( !Q_stricmp( token, "rounds" ) ) {
 			G_WavesParseInt( p, &group->fromRound );
 			G_WavesParseInt( p, &group->toRound );
+		}
+		else if ( !Q_stricmp( token, "maxAlive" ) ) {
+			G_WavesParseInt( p, &group->maxAlive );
 		}
 		else if ( !Q_stricmp( token, "npc" ) ) {
 			if ( group->numNpcs >= MAX_WAVE_GROUP_NPCS ) {
@@ -326,18 +331,36 @@ static gentity_t *G_WavesClosestPlayer( vec3_t origin ) {
 	return best;
 }
 
-static qboolean G_WavesGroupActive( waveGroup_t *group, qboolean checkRounds ) {
-	return ( !checkRounds
-		|| (waves.round >= group->fromRound && (!group->toRound || waves.round <= group->toRound)) );
+static qboolean G_WavesGroupActive( waveGroup_t *groups, int index, qboolean checkRounds ) {
+	waveGroup_t	*group = &groups[index];
+	int			i, alive = 0;
+
+	if ( !checkRounds ) {
+		return qtrue;
+	}
+	if ( waves.round < group->fromRound || (group->toRound && waves.round > group->toRound) ) {
+		return qfalse;
+	}
+	if ( group->maxAlive > 0 ) {
+		for ( i = 0; i < waves.numAlive; i++ ) {
+			if ( waves.alive[i].group == index ) {
+				alive++;
+			}
+		}
+		if ( alive >= group->maxAlive ) {
+			return qfalse;
+		}
+	}
+	return qtrue;
 }
 
-static const char *G_WavesPickNpc( waveGroup_t *groups, int numGroups, qboolean checkRounds ) {
+static const char *G_WavesPickNpc( waveGroup_t *groups, int numGroups, qboolean checkRounds, int *pickedGroup ) {
 	int	total = 0, pick, i, j;
 
 	for ( i = 0; i < numGroups; i++ ) {
 		waveGroup_t *group = &groups[i];
 
-		if ( !G_WavesGroupActive( group, checkRounds ) ) {
+		if ( !G_WavesGroupActive( groups, i, checkRounds ) ) {
 			continue;
 		}
 		for ( j = 0; j < group->numNpcs; j++ ) {
@@ -352,12 +375,13 @@ static const char *G_WavesPickNpc( waveGroup_t *groups, int numGroups, qboolean 
 	for ( i = 0; i < numGroups; i++ ) {
 		waveGroup_t *group = &groups[i];
 
-		if ( !G_WavesGroupActive( group, checkRounds ) ) {
+		if ( !G_WavesGroupActive( groups, i, checkRounds ) ) {
 			continue;
 		}
 		for ( j = 0; j < group->numNpcs; j++ ) {
 			pick -= group->npcs[j].weight;
 			if ( pick < 0 ) {
+				*pickedGroup = i;
 				return group->npcs[j].type;
 			}
 		}
@@ -446,15 +470,19 @@ static void G_WavesSpawnEnemy( qboolean boss ) {
 	vec3_t		spot, dir, angles;
 	float		yaw = 0.0f;
 	waveEnemy_t	*enemy;
+	int			group = -1;
 
 	if ( boss ) {
-		type = G_WavesPickNpc( &bossGroup, 1, qfalse );
+		type = G_WavesPickNpc( &bossGroup, 1, qfalse, &group );
+		group = -1;
 	}
 	else {
-		type = G_WavesPickNpc( waveGroups, numWaveGroups, qtrue );
+		type = G_WavesPickNpc( waveGroups, numWaveGroups, qtrue, &group );
 	}
 	if ( !type ) {
-		waves.bossPending = qfalse;
+		if ( boss ) {
+			waves.bossPending = qfalse;
+		}
 		return;
 	}
 	if ( !G_WavesPickSpot( spot ) ) {
@@ -487,6 +515,7 @@ static void G_WavesSpawnEnemy( qboolean boss ) {
 	enemy->num = npc->s.number;
 	enemy->scaled = qfalse;
 	enemy->boss = boss;
+	enemy->group = group;
 	if ( boss ) {
 		waves.numBosses++;
 		enemy->healthScale = wavesSettings.bossHealth * (1.0f + wavesSettings.bossHealthGrowth * (waves.numBosses - 1) / 100.0f);
