@@ -631,10 +631,54 @@ int ForcePowerUsableOn(gentity_t *attacker, gentity_t *other, forcePowers_t forc
 	return 1;
 }
 
+// Value for the current Force Heal level from a "level1 level2 level3" list, or -1 when the list is not set
+static int WP_ForceHealLevelValue( gentity_t *self, const char *list )
+{
+	const int lvl = self->client->ps.fd.forcePowerLevel[FP_HEAL];
+	int values[3];
+
+	if ( lvl < FORCE_LEVEL_1 || lvl > FORCE_LEVEL_3 || sscanf( list, "%i %i %i", &values[0], &values[1], &values[2] ) != 3 )
+	{
+		return -1;
+	}
+	return values[lvl - FORCE_LEVEL_1];
+}
+
+// Health the next Force Heal gives, limited to what is missing
+static int WP_ForceHealAmount( gentity_t *self )
+{
+	const int missing = self->client->ps.stats[STAT_MAX_HEALTH] - self->health - self->client->forceHealPending;
+	int amount = WP_ForceHealLevelValue( self, g_forceHealAmount.string );
+
+	if ( amount < 0 )
+	{
+		amount = 0;
+	}
+	return Q_max( 0, Q_min( amount, missing ) );
+}
+
+// Force the next Force Heal costs, paid only for the health it gives; 0 keeps the original table
+static int WP_ForceHealCost( gentity_t *self )
+{
+	const int amount = WP_ForceHealLevelValue( self, g_forceHealAmount.string );
+	const int cost = WP_ForceHealLevelValue( self, g_forceHealCost.string );
+
+	if ( amount <= 0 || cost < 0 )
+	{
+		return 0;
+	}
+	return Q_max( 1, ( cost * WP_ForceHealAmount( self ) + amount - 1 ) / amount );
+}
+
 qboolean WP_ForcePowerAvailable( gentity_t *self, forcePowers_t forcePower, int overrideAmt )
 {
 	int	drain = overrideAmt ? overrideAmt :
 				forcePowerNeeded[self->client->ps.fd.forcePowerLevel[forcePower]][forcePower];
+
+	if ( forcePower == FP_HEAL && !overrideAmt && WP_ForceHealCost( self ) )
+	{
+		drain = WP_ForceHealCost( self );
+	}
 
 	if (self->client->ps.fd.forcePowersActive & (1 << forcePower))
 	{ //we're probably going to deactivate it..
@@ -1178,7 +1222,14 @@ void ForceHeal( gentity_t *self )
 		return;
 	}
 
-	if (self->client->ps.fd.forcePowerLevel[FP_HEAL] == FORCE_LEVEL_3)
+	if ( WP_ForceHealCost( self ) )
+	{
+		const int cost = WP_ForceHealCost( self );
+
+		WP_ForceHealAdd( self, WP_ForceHealAmount( self ) );
+		BG_ForcePowerDrain( &self->client->ps, FP_HEAL, cost );
+	}
+	else if (self->client->ps.fd.forcePowerLevel[FP_HEAL] == FORCE_LEVEL_3)
 	{
 		WP_ForceHealAdd( self, 25 ); //This was 50, but that angered the Balance God.
 		BG_ForcePowerDrain( &self->client->ps, FP_HEAL, 0 );
