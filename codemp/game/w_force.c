@@ -1104,6 +1104,63 @@ void WP_ForcePowerStart( gentity_t *self, forcePowers_t forcePower, int override
 	}
 }
 
+// Instant as in the original game with g_forceHealTime 0, otherwise queued and given by WP_ForceHealUpdate
+static void WP_ForceHealAdd( gentity_t *self, int amount )
+{
+	gclient_t *client = self->client;
+
+	if ( g_forceHealTime.integer <= 0 )
+	{
+		self->health += amount;
+
+		if (self->health > client->ps.stats[STAT_MAX_HEALTH])
+		{
+			self->health = client->ps.stats[STAT_MAX_HEALTH];
+		}
+		return;
+	}
+
+	amount = Q_min( amount, client->ps.stats[STAT_MAX_HEALTH] - self->health - client->forceHealPending );
+	if ( amount <= 0 )
+	{
+		return;
+	}
+	if ( !client->forceHealPending )
+	{
+		client->forceHealFrac = 0.0f;
+		client->forceHealLastTime = level.time;
+	}
+	client->forceHealPending += amount;
+	client->forceHealRate = client->forceHealPending * 1000.0f / g_forceHealTime.integer;
+}
+
+static void WP_ForceHealUpdate( gentity_t *self )
+{
+	gclient_t *client = self->client;
+	int step;
+
+	if ( !client->forceHealPending )
+	{
+		return;
+	}
+	if ( self->health <= 0 )
+	{
+		client->forceHealPending = 0;
+		return;
+	}
+
+	client->forceHealFrac += client->forceHealRate * ( level.time - client->forceHealLastTime ) / 1000.0f;
+	client->forceHealLastTime = level.time;
+	step = Q_min( (int)client->forceHealFrac, client->forceHealPending );
+	if ( step <= 0 )
+	{
+		return;
+	}
+	client->forceHealFrac -= step;
+	client->forceHealPending -= step;
+	self->health = Q_min( self->health + step, client->ps.stats[STAT_MAX_HEALTH] );
+}
+
 void ForceHeal( gentity_t *self )
 {
 	if ( self->health <= 0 )
@@ -1116,39 +1173,24 @@ void ForceHeal( gentity_t *self )
 		return;
 	}
 
-	if ( self->health >= self->client->ps.stats[STAT_MAX_HEALTH])
+	if ( self->health + self->client->forceHealPending >= self->client->ps.stats[STAT_MAX_HEALTH])
 	{
 		return;
 	}
 
 	if (self->client->ps.fd.forcePowerLevel[FP_HEAL] == FORCE_LEVEL_3)
 	{
-		self->health += 25; //This was 50, but that angered the Balance God.
-
-		if (self->health > self->client->ps.stats[STAT_MAX_HEALTH])
-		{
-			self->health = self->client->ps.stats[STAT_MAX_HEALTH];
-		}
+		WP_ForceHealAdd( self, 25 ); //This was 50, but that angered the Balance God.
 		BG_ForcePowerDrain( &self->client->ps, FP_HEAL, 0 );
 	}
 	else if (self->client->ps.fd.forcePowerLevel[FP_HEAL] == FORCE_LEVEL_2)
 	{
-		self->health += 10;
-
-		if (self->health > self->client->ps.stats[STAT_MAX_HEALTH])
-		{
-			self->health = self->client->ps.stats[STAT_MAX_HEALTH];
-		}
+		WP_ForceHealAdd( self, 10 );
 		BG_ForcePowerDrain( &self->client->ps, FP_HEAL, 0 );
 	}
 	else
 	{
-		self->health += 5;
-
-		if (self->health > self->client->ps.stats[STAT_MAX_HEALTH])
-		{
-			self->health = self->client->ps.stats[STAT_MAX_HEALTH];
-		}
+		WP_ForceHealAdd( self, 5 );
 		BG_ForcePowerDrain( &self->client->ps, FP_HEAL, 0 );
 	}
 	/*
@@ -5540,6 +5582,8 @@ void WP_ForcePowersUpdate( gentity_t *self, usercmd_t *ucmd )
 	{
 		return;
 	}
+
+	WP_ForceHealUpdate( self );
 
 	/*
 	if (self->client->ps.fd.saberAnimLevel > self->client->ps.fd.forcePowerLevel[FP_SABER_OFFENSE])
