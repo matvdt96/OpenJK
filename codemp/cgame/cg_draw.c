@@ -1330,6 +1330,257 @@ static void CG_DrawSimpleForcePower( const centity_t *cent )
 CG_DrawHUD
 ================
 */
+#define HUDBAR_X				16.0f
+#define HUDBAR_BOTTOM			16.0f
+#define HUDBAR_GAP				4.0f
+#define HUDBAR_HEALTH_H			18.0f
+#define HUDBAR_FORCE_H			12.0f
+#define HUDBAR_LENGTH			(HUDBAR_HEALTH_H * 7.5f)
+#define HUDBAR_ARMOR_LENGTH		(HUDBAR_HEALTH_H * 6.5f)
+#define HUDBAR_DIGIT_ASPECT		(387.0f / 10.0f / 64.0f)
+#define HUDBAR_FORCE_MAX		100.0f
+#define HUDBAR_STYLE_GAP		1.8f
+#define HUDBAR_LABEL_ASPECT		(204.0f / 64.0f)
+#define HUDBAR_LABEL_HEIGHT		(0.67f * 64.0f / 52.0f)
+#define HUDBAR_LABEL_COUNT		5
+#define HUDBAR_AMMO_NUM_H		0.95f
+#define HUDBAR_AMMO_ICON_H		0.55f
+#define HUDBAR_AMMO_NAME_H		0.33f
+#define HUDBAR_AMMO_LOW			15
+
+static const vec4_t hudBarTrackColor = { 0.07f, 0.086f, 0.11f, 0.55f };
+static const vec4_t hudBarDarkColor = { 0.149f, 0.169f, 0.192f, 1.0f };
+static const vec4_t hudBarHealthColor = { 0.949f, 0.761f, 0.196f, 1.0f };
+static const vec4_t hudBarForceColor = { 0.961f, 0.961f, 0.961f, 1.0f };
+static const vec4_t hudBarArmorColor = { 0.18f, 0.592f, 0.788f, 1.0f };
+static const vec4_t hudBarStyleOffColor = { 1.0f, 1.0f, 1.0f, 0.45f };
+static const vec4_t hudBarAmmoLowColor = { 1.0f, 0.541f, 0.239f, 1.0f };
+static const vec4_t hudBarAmmoNameColor = { 1.0f, 1.0f, 1.0f, 0.65f };
+
+// Horizontal size of one unit of height, so the bars keep their shape on wide screens
+static float CG_HudBarAspect( void )
+{
+	if ( !cgs.glconfig.vidWidth || !cgs.glconfig.vidHeight )
+	{
+		return 1.0f;
+	}
+	return ( SCREEN_WIDTH * cgs.glconfig.vidHeight ) / (float)( SCREEN_HEIGHT * cgs.glconfig.vidWidth );
+}
+
+static float CG_HudBarScale( void )
+{
+	return Com_Clamp( 0.5f, 3.0f, cg_hudBarsScale.value );
+}
+
+// One digit of the number, dark where the bar fill passes under it (left of edge) and light elsewhere
+static void CG_DrawHudBarDigit( float x, float y, float w, float h, int digit, float edge, const vec4_t light )
+{
+	const float s = digit / 10.0f;
+	const float split = Com_Clamp( 0.0f, 1.0f, ( edge - x ) / w );
+
+	if ( split > 0.0f )
+	{
+		trap->R_SetColor( hudBarDarkColor );
+		trap->R_DrawStretchPic( x, y, w * split, h, s, 0, s + 0.1f * split, 1, cgs.media.hudBarDigits );
+	}
+	if ( split < 1.0f )
+	{
+		trap->R_SetColor( light );
+		trap->R_DrawStretchPic( x + w * split, y, w * ( 1.0f - split ), h, s + 0.1f * split, 0, s + 0.1f, 1, cgs.media.hudBarDigits );
+	}
+}
+
+static void CG_DrawHudBar( float x, float y, float w, float h, float frac, int value, qhandle_t track, qhandle_t fill,
+	const vec4_t fillColor, const vec4_t numColor, float numHeight, float numRight )
+{
+	const float aspect = CG_HudBarAspect();
+	const float edge = x + w * frac;
+	const float dh = h * numHeight;
+	const float dw = dh * HUDBAR_DIGIT_ASPECT * aspect;
+	const char *text = va( "%i", value );
+	float dx = x + w - h * numRight * aspect - dw * strlen( text );
+	int i;
+
+	trap->R_SetColor( hudBarTrackColor );
+	trap->R_DrawStretchPic( x, y, w, h, 0, 0, 1, 1, track );
+	if ( frac > 0.0f )
+	{
+		trap->R_SetColor( fillColor );
+		trap->R_DrawStretchPic( x, y, w * frac, h, 0, 0, frac, 1, fill );
+	}
+	for ( i = 0; text[i]; i++, dx += dw )
+	{
+		if ( text[i] >= '0' && text[i] <= '9' )
+		{
+			CG_DrawHudBarDigit( dx, y + ( h - dh ) * 0.5f, dw, dh, text[i] - '0', edge, numColor );
+		}
+	}
+	trap->R_SetColor( NULL );
+}
+
+// Pill of any length: the two halves of a disc for the ends, its middle column stretched in between
+static void CG_DrawHudPill( float x, float y, float w, float h, const vec4_t color )
+{
+	const float r = Q_min( w * 0.5f, h * 0.5f * CG_HudBarAspect() );
+
+	trap->R_SetColor( color );
+	trap->R_DrawStretchPic( x, y, r, h, 0, 0, 0.5f, 1, cgs.media.hudBarCircle );
+	trap->R_DrawStretchPic( x + r, y, w - r * 2.0f, h, 0.5f, 0, 0.5f, 1, cgs.media.hudBarCircle );
+	trap->R_DrawStretchPic( x + w - r, y, r, h, 0.5f, 0, 1, 1, cgs.media.hudBarCircle );
+}
+
+// label: FAST, MEDIUM, STRONG, DUAL, STAFF (cells of gfx/hud/bf_style_labels)
+static void CG_DrawHudStyleSegment( float x, float y, float w, float h, int label, qboolean active )
+{
+	const float lh = h * HUDBAR_LABEL_HEIGHT;
+	const float lw = lh * HUDBAR_LABEL_ASPECT * CG_HudBarAspect();
+
+	CG_DrawHudPill( x, y, w, h, active ? hudBarForceColor : hudBarTrackColor );
+	trap->R_SetColor( active ? hudBarDarkColor : hudBarStyleOffColor );
+	trap->R_DrawStretchPic( x + ( w - lw ) * 0.5f, y + ( h - lh ) * 0.5f, lw, lh,
+		label / (float)HUDBAR_LABEL_COUNT, 0, ( label + 1 ) / (float)HUDBAR_LABEL_COUNT, 1, cgs.media.hudBarStyleLabels );
+}
+
+// Saber style above the armor bar: three segments with the current one lit, or a single one for dual and staff
+static void CG_DrawHudSaberStyle( float x, float y, float w, float h )
+{
+	const int style = cg.predictedPlayerState.fd.saberDrawAnimLevel;
+	const float gap = HUDBAR_STYLE_GAP * CG_HudBarScale() * CG_HudBarAspect();
+	const float segW = ( w - gap * 2.0f ) / 3.0f;
+	int active, i;
+
+	if ( style == SS_DUAL || style == SS_STAFF )
+	{
+		CG_DrawHudStyleSegment( x, y, w, h, style == SS_DUAL ? 3 : 4, qtrue );
+		trap->R_SetColor( NULL );
+		return;
+	}
+
+	active = ( style == SS_FAST || style == SS_TAVION ) ? 0 : style == SS_MEDIUM ? 1 : 2;
+	for ( i = 0; i < 3; i++ )
+	{
+		CG_DrawHudStyleSegment( x + ( segW + gap ) * i, y, segW, h, i, i == active ? qtrue : qfalse );
+	}
+	trap->R_SetColor( NULL );
+}
+
+// Rajdhani in three widths (normal, 16:10, 16:9) so wide screens do not stretch the text
+static qhandle_t CG_HudBarFont( void )
+{
+	const float aspect = CG_HudBarAspect();
+	const int width = aspect > 0.92f ? 0 : aspect > 0.79f ? 1 : 2;
+
+	return cgs.media.hudBarFonts[width] ? cgs.media.hudBarFonts[width] : cgs.media.hudBarFonts[0];
+}
+
+// Ammo of the current weapon, right aligned with its bottom at y: weapon name above, cartridges icon and count, orange when low
+static void CG_DrawHudAmmo( float right, float bottom, float h )
+{
+	const int weapon = cg.snap->ps.weapon;
+	const float aspect = CG_HudBarAspect();
+	const float dh = h * HUDBAR_AMMO_NUM_H, dw = dh * HUDBAR_DIGIT_ASPECT * aspect;
+	const float iconH = h * HUDBAR_AMMO_ICON_H, iconW = iconH * aspect;
+	const qhandle_t font = CG_HudBarFont();
+	const float *color;
+	const char *text;
+	char name[128];
+	float x, scale;
+	int ammo, max, i;
+
+	if ( weapon <= WP_NONE || weapon >= WP_NUM_WEAPONS ||
+		( !weaponData[weapon].energyPerShot && !weaponData[weapon].altEnergyPerShot ) )
+	{
+		return;
+	}
+	ammo = cg.snap->ps.ammo[weaponData[weapon].ammoIndex];
+	if ( ammo < 0 )
+	{
+		return;
+	}
+	max = ammoData[weaponData[weapon].ammoIndex].max;
+	color = ( max > 0 && ammo * 100 <= max * HUDBAR_AMMO_LOW ) ? hudBarAmmoLowColor : hudBarForceColor;
+
+	text = va( "%i", ammo );
+	x = right - dw * strlen( text );
+	for ( i = 0; text[i]; i++ )
+	{
+		CG_DrawHudBarDigit( x + dw * i, bottom - dh, dw, dh, text[i] - '0', 0.0f, color );
+	}
+	trap->R_SetColor( color );
+	trap->R_DrawStretchPic( x - iconW - h * 0.2f * aspect, bottom - ( dh + iconH ) * 0.5f, iconW, iconH, 0, 0, 1, 1, cgs.media.hudBarAmmo );
+	trap->R_SetColor( NULL );
+
+	if ( !font || !cg_weapons[weapon].item )
+	{
+		return;
+	}
+	Q_strncpyz( name, cg_weapons[weapon].item->classname, sizeof( name ) );
+	if ( !trap->SE_GetStringTextString( va( "SP_INGAME_%s", Q_strupr( name ) ), name, sizeof( name ) ) )
+	{
+		Q_strncpyz( name, cg_weapons[weapon].item->classname, sizeof( name ) );
+	}
+	Q_strupr( name );
+	scale = h * HUDBAR_AMMO_NAME_H / Q_max( 1, trap->R_Font_HeightPixels( font, 1.0f ) );
+	trap->R_Font_DrawString( right - trap->R_Font_StrLenPixels( name, font, scale ), bottom - dh - h * HUDBAR_AMMO_NAME_H * 1.1f,
+		name, hudBarAmmoNameColor, font, -1, scale );
+}
+
+static void CG_DrawHudBars( void )
+{
+	const playerState_t *ps = &cg.snap->ps;
+	const float scale = CG_HudBarScale();
+	const float healthH = HUDBAR_HEALTH_H * scale, forceH = HUDBAR_FORCE_H * scale;
+	const float healthY = SCREEN_HEIGHT - HUDBAR_BOTTOM - forceH - HUDBAR_GAP * scale - healthH;
+	const float length = HUDBAR_LENGTH * scale * CG_HudBarAspect(), armorLength = HUDBAR_ARMOR_LENGTH * scale * CG_HudBarAspect();
+	const int health = Q_max( 0, ps->stats[STAT_HEALTH] );
+	const int maxHealth = Q_max( 1, ps->stats[STAT_MAX_HEALTH] );
+	vec4_t forceColor;
+
+	CG_DrawHudBar( HUDBAR_X, healthY, length, healthH, Com_Clamp( 0.0f, 1.0f, health / (float)maxHealth ), health,
+		cgs.media.hudBarHealthTrack, cgs.media.hudBarHealthFill, colorTable[CT_WHITE], hudBarHealthColor, 0.62f, 0.38f );
+
+	CG_DrawHudBar( SCREEN_WIDTH - HUDBAR_X - armorLength, SCREEN_HEIGHT - HUDBAR_BOTTOM - healthH, armorLength, healthH,
+		Com_Clamp( 0.0f, 1.0f, ps->stats[STAT_ARMOR] / (float)maxHealth ), Q_max( 0, ps->stats[STAT_ARMOR] ),
+		cgs.media.hudBarArmorTrack, cgs.media.hudBarArmorFill, hudBarArmorColor, hudBarArmorColor, 0.62f, 0.38f );
+
+	if ( ps->weapon == WP_SABER )
+	{
+		CG_DrawHudSaberStyle( SCREEN_WIDTH - HUDBAR_X - armorLength, SCREEN_HEIGHT - HUDBAR_BOTTOM - healthH - HUDBAR_GAP * scale - forceH,
+			armorLength, forceH );
+	}
+	else
+	{
+		CG_DrawHudAmmo( SCREEN_WIDTH - HUDBAR_X, SCREEN_HEIGHT - HUDBAR_BOTTOM - healthH - HUDBAR_GAP * scale, healthH );
+	}
+
+	if ( !ps->fd.forcePowersKnown )
+	{
+		return;
+	}
+
+	// Make the hud flash by setting forceHUDTotalFlashTime above cg.time
+	memcpy( forceColor, colorTable[CT_WHITE], sizeof( vec4_t ) );
+	if ( cg.forceHUDTotalFlashTime > cg.time )
+	{
+		memcpy( forceColor, colorTable[CT_RED], sizeof( vec4_t ) );
+		if ( cg.forceHUDNextFlashTime < cg.time )
+		{
+			cg.forceHUDNextFlashTime = cg.time + 400;
+			trap->S_StartSound( NULL, 0, CHAN_LOCAL, cgs.media.noforceSound );
+			cg.forceHUDActive = cg.forceHUDActive ? qfalse : qtrue;
+		}
+	}
+	else
+	{
+		cg.forceHUDNextFlashTime = 0;
+		cg.forceHUDActive = qtrue;
+	}
+
+	CG_DrawHudBar( HUDBAR_X, SCREEN_HEIGHT - HUDBAR_BOTTOM - forceH, length, forceH,
+		Com_Clamp( 0.0f, 1.0f, ps->fd.forcePower / HUDBAR_FORCE_MAX ), Q_max( 0, ps->fd.forcePower ),
+		cgs.media.hudBarForceTrack, cgs.media.hudBarForceFill, forceColor, hudBarForceColor, 0.82f, 0.5f );
+}
+
 void CG_DrawHUD(centity_t	*cent)
 {
 	menuDef_t	*menuHUD = NULL;
@@ -1364,8 +1615,13 @@ void CG_DrawHUD(centity_t	*cent)
 
 	if (cg.predictedPlayerState.pm_type != PM_SPECTATOR)
 	{
+		if ( cg_hudBars.integer )
+		{
+			CG_DrawHudBars();
+		}
+
 		// Draw the left HUD
-		menuHUD = Menus_FindByName("lefthud");
+		menuHUD = cg_hudBars.integer ? NULL : Menus_FindByName("lefthud");
 		Menu_Paint( menuHUD, qtrue );
 
 		if (menuHUD)
@@ -1447,7 +1703,7 @@ void CG_DrawHUD(centity_t	*cent)
 			scoreStr = va("%s: %i", CG_GetStringEdString("MP_INGAME", "SCORE"), cg.snap->ps.persistant[PERS_SCORE]);
 		}
 
-		menuHUD = Menus_FindByName("righthud");
+		menuHUD = cg_hudBars.integer ? NULL : Menus_FindByName("righthud");
 		Menu_Paint( menuHUD, qtrue );
 
 		if (menuHUD)

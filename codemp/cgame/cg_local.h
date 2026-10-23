@@ -1134,6 +1134,17 @@ typedef struct cgMedia_s {
 	// Saber shaders
 	//-----------------------------
 	qhandle_t	forceCoronaShader;
+	qhandle_t	hudBarHealthTrack;
+	qhandle_t	hudBarHealthFill;
+	qhandle_t	hudBarForceTrack;
+	qhandle_t	hudBarForceFill;
+	qhandle_t	hudBarArmorTrack;
+	qhandle_t	hudBarArmorFill;
+	qhandle_t	hudBarCircle;
+	qhandle_t	hudBarStyleLabels;
+	qhandle_t	hudBarDigits;
+	qhandle_t	hudBarAmmo;
+	qhandle_t	hudBarFonts[3];
 
 	qhandle_t	redSaberGlowShader;
 	qhandle_t	redSaberCoreShader;
