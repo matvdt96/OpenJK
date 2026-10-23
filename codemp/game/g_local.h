@@ -1395,6 +1395,8 @@ qboolean G_WavesSpawnNearTeammate( gentity_t *ent, vec3_t origin, vec3_t angles 
 int G_WavesScaleDamage( gentity_t *targ, gentity_t *attacker, int damage, int mod );
 int G_WavesMaxAmmo( gentity_t *ent, int ammo );
 int G_WavesForceRegenTime( gentity_t *ent, int regenTime );
+qboolean G_WavesGuardBroken( gentity_t *blocker, gentity_t *attacker, int damage );
+void G_WavesPaySaberBlock( gentity_t *blocker, gentity_t *attacker, int damage );
 void G_WavesTimerActions( gentity_t *ent );
 void G_WavesEnemyDamaged( gentity_t *targ, gentity_t *attacker );
 void G_WavesEnemyKilled( gentity_t *self, gentity_t *attacker );

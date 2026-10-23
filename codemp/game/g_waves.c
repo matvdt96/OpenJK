@@ -85,6 +85,7 @@ typedef struct wavesSettings_s {
 	int		bossHealth;
 	int		bossHealthGrowth;
 	int		refillAlive;
+	int		blockCost;
 } wavesSettings_t;
 
 typedef struct waveEnemy_s {
@@ -137,6 +138,7 @@ static void G_WavesDefaultSettings( void ) {
 	wavesSettings.bossHealth = 5;
 	wavesSettings.bossHealthGrowth = 25;
 	wavesSettings.refillAlive = 0;
+	wavesSettings.blockCost = 0;
 }
 
 static qboolean G_WavesParseInt( const char **p, int *out ) {
@@ -182,6 +184,7 @@ static void G_WavesParseSettings( const char **p ) {
 		else if ( !Q_stricmp( token, "bossHealth" ) )			wavesSettings.bossHealth = value;
 		else if ( !Q_stricmp( token, "bossHealthGrowth" ) )		wavesSettings.bossHealthGrowth = value;
 		else if ( !Q_stricmp( token, "refillAlive" ) )			wavesSettings.refillAlive = value;
+		else if ( !Q_stricmp( token, "blockCost" ) )			wavesSettings.blockCost = value;
 		else Com_Printf( S_COLOR_YELLOW "%s: unknown setting '%s'\n", WAVES_FILE, token );
 	}
 }
@@ -1270,6 +1273,29 @@ static int G_WavesDamageType( int mod ) {
 		return WAVES_ITEM_WEAPONDAMAGE;
 	default:
 		return ( mod >= MOD_BRYAR_PISTOL && mod <= MOD_DET_PACK_SPLASH ) ? WAVES_ITEM_WEAPONDAMAGE : -1;
+	}
+}
+
+// Force an enemy pays to block a player's shot with the saber, 0 = free
+static int G_WavesSaberBlockCost( gentity_t *blocker, gentity_t *attacker, int damage ) {
+	if ( level.gametype != GT_WAVES || wavesSettings.blockCost <= 0 || !blocker || !blocker->client || blocker->s.number < MAX_CLIENTS
+		|| !attacker || !attacker->client || attacker->s.number >= MAX_CLIENTS ) {
+		return 0;
+	}
+	return Q_max( 1, damage * wavesSettings.blockCost / 100 );
+}
+
+qboolean G_WavesGuardBroken( gentity_t *blocker, gentity_t *attacker, int damage ) {
+	const int cost = G_WavesSaberBlockCost( blocker, attacker, damage );
+
+	return cost && blocker->client->ps.fd.forcePower < cost;
+}
+
+void G_WavesPaySaberBlock( gentity_t *blocker, gentity_t *attacker, int damage ) {
+	const int cost = G_WavesSaberBlockCost( blocker, attacker, damage );
+
+	if ( cost ) {
+		blocker->client->ps.fd.forcePower = Q_max( 0, blocker->client->ps.fd.forcePower - cost );
 	}
 }
 

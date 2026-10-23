@@ -507,11 +507,14 @@ void G_MissileImpact( gentity_t *ent, trace_t *trace ) {
 		ent->methodOfDeath != MOD_CONC_ALT &&
 		other->client->ps.saberBlockTime < level.time &&
 		!isKnockedSaber &&
+		!G_WavesGuardBroken(other, &g_entities[ent->r.ownerNum], ent->damage) &&
 		WP_SaberCanBlock(other, ent->r.currentOrigin, 0, 0, qtrue, 0))
 	{ //only block one projectile per 200ms (to prevent giant swarms of projectiles being blocked)
 		vec3_t fwd;
 		gentity_t *te;
 		int otherDefLevel = other->client->ps.fd.forcePowerLevel[FP_SABER_DEFENSE];
+
+		G_WavesPaySaberBlock(other, &g_entities[ent->r.ownerNum], ent->damage);
 
 		te = G_TempEntity( ent->r.currentOrigin, EV_SABER_BLOCK );
 		VectorCopy(ent->r.currentOrigin, te->s.origin);
@@ -576,12 +579,15 @@ void G_MissileImpact( gentity_t *ent, trace_t *trace ) {
 			ent->methodOfDeath != MOD_REPEATER_ALT &&
 			ent->methodOfDeath != MOD_FLECHETTE_ALT_SPLASH &&
 			ent->methodOfDeath != MOD_CONC &&
-			ent->methodOfDeath != MOD_CONC_ALT /*&&
+			ent->methodOfDeath != MOD_CONC_ALT &&
+			!G_WavesGuardBroken(otherOwner, &g_entities[ent->r.ownerNum], ent->damage) /*&&
 			otherOwner->client->ps.saberBlockTime < level.time*/)
 		{ //for now still deflect even if saberBlockTime >= level.time because it hit the actual saber
 			vec3_t fwd;
 			gentity_t *te;
 			int otherDefLevel = otherOwner->client->ps.fd.forcePowerLevel[FP_SABER_DEFENSE];
+
+			G_WavesPaySaberBlock(otherOwner, &g_entities[ent->r.ownerNum], ent->damage);
 
 			//in this case, deflect it even if we can't actually block it because it hit our saber
 			//WP_SaberCanBlock(otherOwner, ent->r.currentOrigin, 0, 0, qtrue, 0);
@@ -639,6 +645,11 @@ void G_MissileImpact( gentity_t *ent, trace_t *trace ) {
 				goto killProj;
 			}
 			return;
+		}
+		else if (otherOwner->takedamage && otherOwner->client &&
+			G_WavesGuardBroken(otherOwner, &g_entities[ent->r.ownerNum], ent->damage))
+		{ //out of force to block, the shot goes through the saber
+			other = otherOwner;
 		}
 	}
 

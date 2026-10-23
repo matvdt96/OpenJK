@@ -620,9 +620,12 @@ static void WP_DisruptorMainFire( gentity_t *ent )
 		}
 		else if (traceEnt && traceEnt->client && traceEnt->client->ps.fd.forcePowerLevel[FP_SABER_DEFENSE] >= FORCE_LEVEL_3)
 		{
-			if (WP_SaberCanBlock(traceEnt, tr.endpos, 0, MOD_DISRUPTOR, qtrue, 0))
+			if (!G_WavesGuardBroken(traceEnt, ent, damage) &&
+				WP_SaberCanBlock(traceEnt, tr.endpos, 0, MOD_DISRUPTOR, qtrue, 0))
 			{ //broadcast and stop the shot because it was blocked
 				gentity_t *te = NULL;
+
+				G_WavesPaySaberBlock(traceEnt, ent, damage);
 
 				tent = G_TempEntity( tr.endpos, EV_DISRUPTOR_MAIN_SHOT );
 				VectorCopy( muzzle, tent->s.origin2 );
@@ -837,9 +840,12 @@ void WP_DisruptorAltFire( gentity_t *ent )
 		}
 		else if (traceEnt && traceEnt->client && traceEnt->client->ps.fd.forcePowerLevel[FP_SABER_DEFENSE] >= FORCE_LEVEL_3)
 		{
-			if (WP_SaberCanBlock(traceEnt, tr.endpos, 0, MOD_DISRUPTOR_SNIPER, qtrue, 0))
+			if (!G_WavesGuardBroken(traceEnt, ent, damage) &&
+				WP_SaberCanBlock(traceEnt, tr.endpos, 0, MOD_DISRUPTOR_SNIPER, qtrue, 0))
 			{ //broadcast and stop the shot because it was blocked
 				gentity_t *te = NULL;
+
+				G_WavesPaySaberBlock(traceEnt, ent, damage);
 
 				tent = G_TempEntity( tr.endpos, EV_DISRUPTOR_SNIPER_SHOT );
 				VectorCopy( muzzle, tent->s.origin2 );
