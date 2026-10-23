@@ -1823,13 +1823,14 @@ typedef struct wavesShopItem_s {
 	int		type;		// wavesItemType_t
 	int		tab;		// shop tab, 0 = quick buy button
 	int		param;		// weapon or force power
-	int		amount;		// consumables: ammo given; upgrades: percent per level; health regen: health per second
+	int		amount[MAX_WAVES_ITEM_LEVELS];	// consumables: ammo given (first value); upgrades: bonus of each level, the last value repeats
 	int		baseLevel;	// level the force user starts with
 	int		numLevels;	// 0 = can be bought again and again at price[0]
 	int		price[MAX_WAVES_ITEM_LEVELS];
 } wavesShopItem_t;
 
 int BG_WavesLoadShop( wavesShopItem_t *items, int maxItems );
+int BG_WavesItemTotal( const wavesShopItem_t *item, int level );
 int BG_WavesItemPrice( const wavesShopItem_t *item, int level );
 
 // BG_Alloc room kept for the NPC structures of every entity slot, which are never freed:

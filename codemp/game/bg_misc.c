@@ -3112,6 +3112,7 @@ static int BG_WavesParseId( stringID_table_t *table, const char *name, const cha
 static qboolean BG_WavesParseItem( const char **p, wavesShopItem_t *item ) {
 	char	key[MAX_TOKEN_CHARS];
 	char	*token;
+	int		numAmounts = 0, i;
 
 	memset( item, 0, sizeof( *item ) );
 	item->param = -1;
@@ -3130,6 +3131,16 @@ static qboolean BG_WavesParseItem( const char **p, wavesShopItem_t *item ) {
 					break;
 				}
 				item->price[item->numLevels++] = atoi( token );
+			}
+			continue;
+		}
+		if ( !Q_stricmp( key, "amount" ) ) {
+			while ( numAmounts < MAX_WAVES_ITEM_LEVELS ) {
+				token = COM_ParseExt( p, qfalse );
+				if ( !token[0] ) {
+					break;
+				}
+				item->amount[numAmounts++] = atoi( token );
 			}
 			continue;
 		}
@@ -3178,9 +3189,6 @@ static qboolean BG_WavesParseItem( const char **p, wavesShopItem_t *item ) {
 		else if ( !Q_stricmp( key, "power" ) ) {
 			item->param = BG_WavesParseId( FPTable, token, item->name );
 		}
-		else if ( !Q_stricmp( key, "amount" ) ) {
-			item->amount = atoi( token );
-		}
 		else if ( !Q_stricmp( key, "base" ) ) {
 			item->baseLevel = atoi( token );
 		}
@@ -3202,7 +3210,25 @@ static qboolean BG_WavesParseItem( const char **p, wavesShopItem_t *item ) {
 	if ( item->type == WAVES_ITEM_AMMO || item->type == WAVES_ITEM_CONSUMABLE || item->type == WAVES_ITEM_SHIELD ) {
 		item->numLevels = 0;
 	}
+	if ( !numAmounts ) {
+		numAmounts = 1;
+		item->amount[0] = item->type == WAVES_ITEM_MAXHEALTH ? WAVES_HEALTH_STEP : item->type == WAVES_ITEM_MAXSHIELD ? WAVES_SHIELD_STEP :
+			item->type == WAVES_ITEM_MAXFORCE ? WAVES_FORCE_STEP : 0;
+	}
+	for ( i = numAmounts; i < MAX_WAVES_ITEM_LEVELS; i++ ) {
+		item->amount[i] = item->amount[numAmounts - 1];
+	}
 	return qtrue;
+}
+
+// Bonus of the first level levels of an upgrade
+int BG_WavesItemTotal( const wavesShopItem_t *item, int level ) {
+	int	i, total = 0;
+
+	for ( i = 0; i < level && i < MAX_WAVES_ITEM_LEVELS; i++ ) {
+		total += item->amount[i];
+	}
+	return total;
 }
 
 int BG_WavesLoadShop( wavesShopItem_t *items, int maxItems ) {

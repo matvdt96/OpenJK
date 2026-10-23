@@ -730,23 +730,12 @@ static int G_WavesItemLevel( gentity_t *ent, int index ) {
 	return itemLevel;
 }
 
-static int G_WavesTotalLevels( gentity_t *ent, int type ) {
-	int	i, total = 0;
-
-	for ( i = 0; i < numShopItems; i++ ) {
-		if ( shopItems[i].type == type ) {
-			total += ent->client->pers.waves.levels[i];
-		}
-	}
-	return total;
-}
-
 static int G_WavesBonus( gentity_t *ent, int type ) {
 	int	i, bonus = 0;
 
 	for ( i = 0; i < numShopItems; i++ ) {
 		if ( shopItems[i].type == type ) {
-			bonus += ent->client->pers.waves.levels[i] * shopItems[i].amount;
+			bonus += BG_WavesItemTotal( &shopItems[i], ent->client->pers.waves.levels[i] );
 		}
 	}
 	return bonus;
@@ -767,15 +756,15 @@ int G_WavesForceRegenTime( gentity_t *ent, int regenTime ) {
 }
 
 static int G_WavesMaxHealth( gentity_t *ent ) {
-	return WAVES_BASE_HEALTH + WAVES_HEALTH_STEP * G_WavesTotalLevels( ent, WAVES_ITEM_MAXHEALTH );
+	return WAVES_BASE_HEALTH + G_WavesBonus( ent, WAVES_ITEM_MAXHEALTH );
 }
 
 static int G_WavesMaxShield( gentity_t *ent ) {
-	return WAVES_BASE_SHIELD + WAVES_SHIELD_STEP * G_WavesTotalLevels( ent, WAVES_ITEM_MAXSHIELD );
+	return WAVES_BASE_SHIELD + G_WavesBonus( ent, WAVES_ITEM_MAXSHIELD );
 }
 
 static int G_WavesMaxForce( gentity_t *ent ) {
-	return WAVES_BASE_FORCE + WAVES_FORCE_STEP * G_WavesTotalLevels( ent, WAVES_ITEM_MAXFORCE );
+	return WAVES_BASE_FORCE + G_WavesBonus( ent, WAVES_ITEM_MAXFORCE );
 }
 
 static void G_WavesSendInventory( gentity_t *ent ) {
@@ -1015,7 +1004,7 @@ static void G_WavesApplyItem( gentity_t *ent, const wavesShopItem_t *item, int i
 	case WAVES_ITEM_CONSUMABLE:
 		ammo = weaponData[item->param].ammoIndex;
 		client->ps.stats[STAT_WEAPONS] |= (1 << item->param);
-		client->ps.ammo[ammo] += item->amount;
+		client->ps.ammo[ammo] += item->amount[0];
 		if ( client->ps.ammo[ammo] > G_WavesMaxAmmo( ent, ammo ) ) {
 			client->ps.ammo[ammo] = G_WavesMaxAmmo( ent, ammo );
 		}
@@ -1026,14 +1015,14 @@ static void G_WavesApplyItem( gentity_t *ent, const wavesShopItem_t *item, int i
 		break;
 	case WAVES_ITEM_MAXHEALTH:
 		client->pers.maxHealth = client->ps.stats[STAT_MAX_HEALTH] = G_WavesMaxHealth( ent );
-		ent->health += WAVES_HEALTH_STEP;
+		ent->health += item->amount[itemLevel - 1];
 		if ( ent->health > client->ps.stats[STAT_MAX_HEALTH] ) {
 			ent->health = client->ps.stats[STAT_MAX_HEALTH];
 		}
 		client->ps.stats[STAT_HEALTH] = ent->health;
 		break;
 	case WAVES_ITEM_MAXSHIELD:
-		client->ps.stats[STAT_ARMOR] += WAVES_SHIELD_STEP;
+		client->ps.stats[STAT_ARMOR] += item->amount[itemLevel - 1];
 		maxShield = G_WavesMaxShield( ent );
 		if ( client->ps.stats[STAT_ARMOR] > maxShield ) {
 			client->ps.stats[STAT_ARMOR] = maxShield;
@@ -1044,7 +1033,7 @@ static void G_WavesApplyItem( gentity_t *ent, const wavesShopItem_t *item, int i
 		break;
 	case WAVES_ITEM_MAXFORCE:
 		client->ps.fd.forcePowerMax = G_WavesMaxForce( ent );
-		client->ps.fd.forcePower = Q_min( client->ps.fd.forcePower + WAVES_FORCE_STEP, client->ps.fd.forcePowerMax );
+		client->ps.fd.forcePower = Q_min( client->ps.fd.forcePower + item->amount[itemLevel - 1], client->ps.fd.forcePowerMax );
 		break;
 	default:
 		break;
@@ -1099,7 +1088,7 @@ void G_WavesBuy( gentity_t *ent, const char *name ) {
 	if ( item->type == WAVES_ITEM_CONSUMABLE && !G_WavesPlayerAlive( ent ) ) {
 		int ammo = weaponData[item->param].ammoIndex;
 
-		client->pers.waves.consumables[ammo] += item->amount;
+		client->pers.waves.consumables[ammo] += item->amount[0];
 		if ( client->pers.waves.consumables[ammo] > G_WavesMaxAmmo( ent, ammo ) ) {
 			client->pers.waves.consumables[ammo] = G_WavesMaxAmmo( ent, ammo );
 		}

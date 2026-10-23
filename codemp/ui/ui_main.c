@@ -1789,10 +1789,9 @@ static void UI_WavesShopBuy( int index ) {
 	trap->Cmd_ExecuteText( EXEC_APPEND, va( "waves_buy %s\n", uiWavesShop[index].name ) );
 }
 
-static qboolean UI_WavesShopStat( const wavesShopItem_t *item, const char **label, const char **format, int *base, int *step ) {
+static qboolean UI_WavesShopStat( const wavesShopItem_t *item, const char **label, const char **format, int *base ) {
 	*format = "+%i%%";
 	*base = 0;
-	*step = item->amount;
 	switch ( item->type ) {
 	case WAVES_ITEM_WEAPONDAMAGE:	*label = "WEAPON DAMAGE";		return qtrue;
 	case WAVES_ITEM_SABERDAMAGE:	*label = "SABER DAMAGE";		return qtrue;
@@ -1803,19 +1802,16 @@ static qboolean UI_WavesShopStat( const wavesShopItem_t *item, const char **labe
 		*label = "MAX HEALTH";
 		*format = "%i";
 		*base = WAVES_BASE_HEALTH;
-		*step = WAVES_HEALTH_STEP;
 		return qtrue;
 	case WAVES_ITEM_MAXSHIELD:
 		*label = "MAX SHIELD";
 		*format = "%i";
 		*base = WAVES_BASE_SHIELD;
-		*step = WAVES_SHIELD_STEP;
 		return qtrue;
 	case WAVES_ITEM_MAXFORCE:
 		*label = "MAX FORCE";
 		*format = "%i";
 		*base = WAVES_BASE_FORCE;
-		*step = WAVES_FORCE_STEP;
 		return qtrue;
 	case WAVES_ITEM_HEALTHREGEN:
 		*label = "HEALTH REGENERATION";
@@ -2137,7 +2133,7 @@ static void UI_WavesShopDrawDetail( const int *levels, int index ) {
 	const float				x = left + pad, w = width - pad * 2;
 	const wavesShopItem_t	*item;
 	const char				*label, *format, *text;
-	int						itemLevel, price, base, step, i;
+	int						itemLevel, price, base, i;
 	float					y, bottom, tw;
 	char					from[32], to[32];
 	qboolean				maxed, canBuy;
@@ -2176,15 +2172,15 @@ static void UI_WavesShopDrawDetail( const int *levels, int index ) {
 	}
 	y += 16 + 8;
 
-	if ( item->numLevels && UI_WavesShopStat( item, &label, &format, &base, &step ) ) {
+	if ( item->numLevels && UI_WavesShopStat( item, &label, &format, &base ) ) {
 		UI_WavesShopBox( x, y, w, 60, uiWavesStatBox, 1, uiWavesCellBorder );
 		UI_WavesShopText( x + 12, y + 16, w - 24, 12, uiWavesGrey, label, ITEM_ALIGN_LEFT );
-		Q_strncpyz( from, va( format, base + step * itemLevel ), sizeof( from ) );
+		Q_strncpyz( from, va( format, base + BG_WavesItemTotal( item, itemLevel ) ), sizeof( from ) );
 		if ( maxed ) {
 			UI_WavesShopText( x, y + 40, w, 26, uiWavesAmber, from, ITEM_ALIGN_CENTER );
 		}
 		else {
-			Q_strncpyz( to, va( format, base + step * ( itemLevel + 1 ) ), sizeof( to ) );
+			Q_strncpyz( to, va( format, base + BG_WavesItemTotal( item, itemLevel + 1 ) ), sizeof( to ) );
 			tw = UI_WavesShopTransition( 0, 0, 22, uiWavesFrom, from, 26, uiWavesAmber, to, 16, 10, qfalse );
 			UI_WavesShopTransition( x + ( w - tw ) * 0.5f, y + 40, 22, uiWavesFrom, from, 26, uiWavesAmber, to, 16, 10, qtrue );
 		}
@@ -2196,8 +2192,8 @@ static void UI_WavesShopDrawDetail( const int *levels, int index ) {
 			if ( i == itemLevel ) {
 				UI_WavesShopFill( x - 6, y, w + 12, 18, uiWavesSelected );
 			}
-			Q_strncpyz( from, va( format, base + step * i ), sizeof( from ) );
-			Q_strncpyz( to, va( format, base + step * ( i + 1 ) ), sizeof( to ) );
+			Q_strncpyz( from, va( format, base + BG_WavesItemTotal( item, i ) ), sizeof( from ) );
+			Q_strncpyz( to, va( format, base + BG_WavesItemTotal( item, i + 1 ) ), sizeof( to ) );
 			UI_WavesShopText( x, y + 9, 0, 14, color, va( "Lv. %i", i + 1 ), ITEM_ALIGN_LEFT );
 			tw = UI_WavesShopTransition( 0, 0, 14, color, from, 14, color, to, 10, 4, qfalse );
 			UI_WavesShopTransition( x + w - tw, y + 9, 14, color, from, 14, color, to, 10, 4, qtrue );
