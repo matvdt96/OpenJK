@@ -1553,6 +1553,10 @@ typedef struct cgs_s {
 	int				debugMelee;
 	int				stepSlideFix;
 	int				saberDirBuffer;
+	int				saberChainMax;
+	int				saberChainFlow;
+	int				saberOpener;
+	int				saberAnimVariants;
 	int				noSpecMove;
 	int				dmflags;
 	int				fraglimit;

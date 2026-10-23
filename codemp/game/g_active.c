@@ -2889,6 +2889,10 @@ void ClientThink_real( gentity_t *ent ) {
 	pmove.debugMelee = g_debugMelee.integer;
 	pmove.stepSlideFix = g_stepSlideFix.integer;
 	pmove.saberDirBuffer = g_saberDirBuffer.integer;
+	pmove.saberChainMax = g_saberChainMax.integer;
+	pmove.saberChainFlow = g_saberChainFlow.integer;
+	pmove.saberOpener = g_saberOpener.integer;
+	pmove.saberAnimVariants = g_saberAnimVariants.integer;
 
 	pmove.noSpecMove = g_noSpecMove.integer;
 

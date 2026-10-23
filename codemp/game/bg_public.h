@@ -543,6 +543,10 @@ typedef struct pmove_s {
 	int			debugMelee;
 	int			stepSlideFix;
 	int			saberDirBuffer;
+	int			saberChainMax;
+	int			saberChainFlow;
+	int			saberOpener;
+	int			saberAnimVariants;
 	int			noSpecMove;
 
 	animation_t	*animations;

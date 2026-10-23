@@ -35,6 +35,18 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 extern qboolean BG_SabersOff( playerState_t *ps );
 saberInfo_t *BG_MySaber( int clientNum, int saberNum );
 
+// Same result on client and server for the same command; unlike PM_irand_timesync it does not repeat when
+// katas start at regular intervals
+static int PM_SaberVariantRand( int count, int salt )
+{
+	unsigned int h = (unsigned int)pm->cmd.serverTime * 2654435761u + (unsigned int)salt * 0x9e3779b9u;
+
+	h ^= h >> 16;
+	h *= 0x45d9f3bu;
+	h ^= h >> 16;
+	return (int)(h % (unsigned int)count);
+}
+
 int PM_irand_timesync(int val1, int val2)
 {
 	int i;
@@ -768,6 +780,10 @@ qboolean PM_SaberKataDone(int curmove, int newmove)
 	{
 		//TEMP: for now, let staff attacks infinitely chain
 		return qfalse;
+	}
+	else if ( pm->saberChainMax > 0 && pm->ps->clientNum < MAX_CLIENTS )
+	{//players can always chain up to saberChainMax attacks, in any direction
+		return (pm->ps->saberAttackChainCount >= pm->saberChainMax) ? qtrue : qfalse;
 	}
 	else if ( pm->ps->fd.saberAnimLevel == FORCE_LEVEL_3 )
 	{
@@ -2528,6 +2544,11 @@ saberMoveName_t PM_SaberAttackForMovement(saberMoveName_t curmove)
 			//sequence changes.
 
 			newmove = LS_A_T2B; //decided we don't like random attacks when idle, use an overhead instead.
+			if ( pm->saberOpener && pm->ps->clientNum < MAX_CLIENTS )
+			{//players open a kata with a wide swing
+				static const saberMoveName_t openers[] = { LS_A_TL2BR, LS_A_TR2BL, LS_A_L2R, LS_A_R2L };
+				newmove = openers[PM_SaberVariantRand( ARRAY_LEN( openers ), 1 )];
+			}
 		}
 	}
 
@@ -3687,6 +3708,11 @@ weapChecks:
 					}
 					else */
 					newmove = PM_SaberAttackForBufferedMovement( curmove );
+					if ( newmove == LS_NONE && pm->saberChainFlow && pm->ps->clientNum < MAX_CLIENTS
+						&& curmove >= LS_A_TL2BR && curmove <= LS_A_T2B )
+					{//no direction pressed, keep the kata going from where the blade ended
+						newmove = PM_AttackMoveForQuad( saberMoveData[curmove].endQuad );
+					}
 					if ( (PM_SaberInBounce( curmove )||PM_SaberInBrokenParry( curmove ))
 						&& saberMoveData[newmove].startQuad == saberMoveData[curmove].endQuad )
 					{//this attack would be a repeat of the last (which was blocked), so don't actually use it, use the default chain attack for this bounce
@@ -3786,6 +3812,22 @@ weapChecks:
 		addTime = weaponData[pm->ps->weapon].fireTime;
 	}
 	pm->ps->weaponTime = addTime;
+}
+
+// Fast style swings borrow the Desann (A4) and Tavion (A5) anim sets: a set is picked when a kata starts and the
+// following moves keep the set of the current torso anim, so the poses always line up
+static int PM_SaberAnimVariantGroup( int newMove ) {
+	static const int groups[] = { 0, SS_DESANN - FORCE_LEVEL_1, SS_TAVION - FORCE_LEVEL_1 };
+	int group;
+
+	if ( newMove >= LS_S_TL2BR && newMove <= LS_S_T2B ) {
+		return groups[PM_SaberVariantRand( ARRAY_LEN( groups ), 2 )];
+	}
+	if ( pm->ps->torsoAnim < BOTH_A1_T__B_ || pm->ps->torsoAnim >= BOTH_A1_T__B_ + SABER_ANIM_GROUP_SIZE * (SS_TAVION - FORCE_LEVEL_1 + 1) ) {
+		return 0;
+	}
+	group = (pm->ps->torsoAnim - BOTH_A1_T__B_) / SABER_ANIM_GROUP_SIZE;
+	return (group == groups[1] || group == groups[2]) ? group : 0;
 }
 
 void PM_SetSaberMove(short newMove)
@@ -3891,6 +3933,11 @@ void PM_SetSaberMove(short newMove)
 		 !BG_SaberInIdle( newMove ) && !PM_SaberInParry( newMove ) && !PM_SaberInKnockaway( newMove ) && !PM_SaberInBrokenParry( newMove ) && !PM_SaberInReflect( newMove ) && !BG_SaberInSpecial(newMove))
 	{//readies, parries and reflections have only 1 level
 		anim += (pm->ps->fd.saberAnimLevel-FORCE_LEVEL_1) * SABER_ANIM_GROUP_SIZE;
+	}
+	else if ( pm->saberAnimVariants && pm->ps->clientNum < MAX_CLIENTS && pm->ps->fd.saberAnimLevel == FORCE_LEVEL_1 && anim != -1 &&
+		 !BG_SaberInIdle( newMove ) && !PM_SaberInParry( newMove ) && !PM_SaberInKnockaway( newMove ) && !PM_SaberInBrokenParry( newMove ) && !PM_SaberInReflect( newMove ) && !BG_SaberInSpecial(newMove))
+	{
+		anim += PM_SaberAnimVariantGroup( newMove ) * SABER_ANIM_GROUP_SIZE;
 	}
 
 	// If the move does the same animation as the last one, we need to force a restart...

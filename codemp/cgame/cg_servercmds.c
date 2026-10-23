@@ -137,6 +137,10 @@ void CG_ParseServerinfo( void ) {
 	cgs.debugMelee = atoi( Info_ValueForKey( info, "g_debugMelee" ) ); //trap->Cvar_GetHiddenVarValue("g_iknowkungfu");
 	cgs.stepSlideFix = atoi( Info_ValueForKey( info, "g_stepSlideFix" ) );
 	cgs.saberDirBuffer = atoi( Info_ValueForKey( info, "g_saberDirBuffer" ) );
+	cgs.saberChainMax = atoi( Info_ValueForKey( info, "g_saberChainMax" ) );
+	cgs.saberChainFlow = atoi( Info_ValueForKey( info, "g_saberChainFlow" ) );
+	cgs.saberOpener = atoi( Info_ValueForKey( info, "g_saberOpener" ) );
+	cgs.saberAnimVariants = atoi( Info_ValueForKey( info, "g_saberAnimVariants" ) );
 
 	cgs.noSpecMove = atoi( Info_ValueForKey( info, "g_noSpecMove" ) );
 
