@@ -1464,6 +1464,19 @@ static void CG_DrawHudSaberStyle( float x, float y, float w, float h )
 	trap->R_SetColor( NULL );
 }
 
+// Value shown by a bar: follows the real one, a unit at a time on small changes and faster on big ones
+static float CG_HudBarFollow( float shown, int target )
+{
+	const float diff = target - shown;
+	const float step = Q_max( cg_hudBarsSpeed.value, fabsf( diff ) * 4.0f ) * cg.frametime * 0.001f;
+
+	if ( cg_hudBarsSpeed.value <= 0.0f || fabsf( diff ) <= step )
+	{
+		return target;
+	}
+	return shown + ( diff > 0.0f ? step : -step );
+}
+
 // Rajdhani in three widths (normal, 16:10, 16:9) so wide screens do not stretch the text
 static qhandle_t CG_HudBarFont( void )
 {
@@ -1527,20 +1540,28 @@ static void CG_DrawHudAmmo( float right, float bottom, float h )
 
 static void CG_DrawHudBars( void )
 {
+	static float shownHealth, shownArmor, shownForce;
 	const playerState_t *ps = &cg.snap->ps;
 	const float scale = CG_HudBarScale();
 	const float healthH = HUDBAR_HEALTH_H * scale, forceH = HUDBAR_FORCE_H * scale;
 	const float healthY = SCREEN_HEIGHT - HUDBAR_BOTTOM - forceH - HUDBAR_GAP * scale - healthH;
 	const float length = HUDBAR_LENGTH * scale * CG_HudBarAspect(), armorLength = HUDBAR_ARMOR_LENGTH * scale * CG_HudBarAspect();
-	const int health = Q_max( 0, ps->stats[STAT_HEALTH] );
 	const int maxHealth = Q_max( 1, ps->stats[STAT_MAX_HEALTH] );
+	int health, armor, force;
 	vec4_t forceColor;
 
-	CG_DrawHudBar( HUDBAR_X, healthY, length, healthH, Com_Clamp( 0.0f, 1.0f, health / (float)maxHealth ), health,
+	shownHealth = CG_HudBarFollow( shownHealth, Q_max( 0, ps->stats[STAT_HEALTH] ) );
+	shownArmor = CG_HudBarFollow( shownArmor, Q_max( 0, ps->stats[STAT_ARMOR] ) );
+	shownForce = CG_HudBarFollow( shownForce, Q_max( 0, ps->fd.forcePower ) );
+	health = (int)( shownHealth + 0.5f );
+	armor = (int)( shownArmor + 0.5f );
+	force = (int)( shownForce + 0.5f );
+
+	CG_DrawHudBar( HUDBAR_X, healthY, length, healthH, Com_Clamp( 0.0f, 1.0f, shownHealth / maxHealth ), health,
 		cgs.media.hudBarHealthTrack, cgs.media.hudBarHealthFill, colorTable[CT_WHITE], hudBarHealthColor, 0.62f, 0.38f );
 
 	CG_DrawHudBar( SCREEN_WIDTH - HUDBAR_X - armorLength, SCREEN_HEIGHT - HUDBAR_BOTTOM - healthH, armorLength, healthH,
-		Com_Clamp( 0.0f, 1.0f, ps->stats[STAT_ARMOR] / (float)maxHealth ), Q_max( 0, ps->stats[STAT_ARMOR] ),
+		Com_Clamp( 0.0f, 1.0f, shownArmor / maxHealth ), armor,
 		cgs.media.hudBarArmorTrack, cgs.media.hudBarArmorFill, hudBarArmorColor, hudBarArmorColor, 0.62f, 0.38f );
 
 	if ( ps->weapon == WP_SABER )
@@ -1577,7 +1598,7 @@ static void CG_DrawHudBars( void )
 	}
 
 	CG_DrawHudBar( HUDBAR_X, SCREEN_HEIGHT - HUDBAR_BOTTOM - forceH, length, forceH,
-		Com_Clamp( 0.0f, 1.0f, ps->fd.forcePower / HUDBAR_FORCE_MAX ), Q_max( 0, ps->fd.forcePower ),
+		Com_Clamp( 0.0f, 1.0f, shownForce / HUDBAR_FORCE_MAX ), force,
 		cgs.media.hudBarForceTrack, cgs.media.hudBarForceFill, forceColor, hudBarForceColor, 0.82f, 0.5f );
 }
 
