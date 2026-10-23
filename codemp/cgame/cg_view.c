@@ -1141,6 +1141,22 @@ Fixed fov at intermissions, otherwise account for fov variable and zooms.
 #define	WAVE_FREQUENCY	0.4
 float zoomFov; //this has to be global client-side
 
+// Fov with a firearm in hand (cg_fovGun, 0 = always cg_fov), blended over FOVGUN_BLEND_TIME when switching weapons
+#define FOVGUN_BLEND_TIME	250.0f
+
+static float CG_GunFov( float fov ) {
+	static float blend;
+	const int weapon = cg.predictedPlayerState.weapon;
+	const qboolean gun = weapon != WP_NONE && weapon != WP_SABER && weapon != WP_MELEE && weapon != WP_STUN_BATON;
+	const float step = cg.frametime / FOVGUN_BLEND_TIME;
+
+	blend = gun ? Q_min( 1.0f, blend + step ) : Q_max( 0.0f, blend - step );
+	if ( cg_fovGun.value <= 0.0f ) {
+		return fov;
+	}
+	return fov + ( Com_Clamp( 1.0f, 130.0f, cg_fovGun.value ) - fov ) * blend;
+}
+
 static int CG_CalcFov( void ) {
 	float	x;
 	float	phase;
@@ -1158,6 +1174,7 @@ static int CG_CalcFov( void ) {
 	{
 		cgFov = 130;
 	}
+	cgFov = CG_GunFov( cgFov );
 
 	if ( cg.predictedPlayerState.pm_type == PM_INTERMISSION ) {
 		// if in intermission, use a fixed value
