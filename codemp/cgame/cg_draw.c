@@ -1831,7 +1831,7 @@ static void CG_DrawHudBars( void )
 		cgs.media.hudBarHealthTrack, cgs.media.hudBarHealthFill, colorTable[CT_WHITE], hudBarHealthColor, 0.62f, 0.38f );
 
 	CG_DrawHudBar( SCREEN_WIDTH - HUDBAR_X - armorLength, SCREEN_HEIGHT - HUDBAR_BOTTOM - healthH, armorLength, healthH,
-		Com_Clamp( 0.0f, 1.0f, shownArmor / maxHealth ), armor,
+		Com_Clamp( 0.0f, 1.0f, shownArmor / ( ps->stats[STAT_MAX_ARMOR] > 0 ? ps->stats[STAT_MAX_ARMOR] : maxHealth ) ), armor,
 		cgs.media.hudBarArmorTrack, cgs.media.hudBarArmorFill, armorColor, hudBarArmorColor, 0.62f, 0.38f );
 
 	if ( ps->weapon == WP_SABER )
@@ -1870,7 +1870,7 @@ static void CG_DrawHudBars( void )
 	}
 
 	CG_DrawHudBar( HUDBAR_X, SCREEN_HEIGHT - HUDBAR_BOTTOM - forceH, length, forceH,
-		Com_Clamp( 0.0f, 1.0f, shownForce / HUDBAR_FORCE_MAX ), force,
+		Com_Clamp( 0.0f, 1.0f, shownForce / ( ps->stats[STAT_MAX_FORCE] > 0 ? ps->stats[STAT_MAX_FORCE] : HUDBAR_FORCE_MAX ) ), force,
 		cgs.media.hudBarForceTrack, cgs.media.hudBarForceFill, forceColor, hudBarForceColor, 0.82f, 0.5f );
 }
 

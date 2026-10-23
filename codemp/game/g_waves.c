@@ -773,6 +773,12 @@ static int G_WavesMaxForce( gentity_t *ent ) {
 	return WAVES_BASE_FORCE + G_WavesBonus( ent, WAVES_ITEM_MAXFORCE );
 }
 
+// Limits the hud bars are drawn against
+static void G_WavesUpdateMaxStats( gentity_t *ent ) {
+	ent->client->ps.stats[STAT_MAX_ARMOR] = G_WavesMaxShield( ent );
+	ent->client->ps.stats[STAT_MAX_FORCE] = ent->client->ps.fd.forcePowerMax;
+}
+
 static void G_WavesSendInventory( gentity_t *ent ) {
 	char	buf[MAX_STRING_CHARS];
 	int		i;
@@ -928,6 +934,7 @@ void G_WavesApplyLoadout( gentity_t *ent ) {
 	}
 	client->ps.fd.forcePowerMax = role == WAVES_ROLE_FORCE ? G_WavesMaxForce( ent ) : WAVES_BASE_FORCE;
 	client->ps.fd.forcePower = client->ps.fd.forcePowerMax;
+	G_WavesUpdateMaxStats( ent );
 
 	G_WavesSendInventory( ent );
 }
@@ -1044,6 +1051,7 @@ static void G_WavesApplyItem( gentity_t *ent, const wavesShopItem_t *item, int i
 	default:
 		break;
 	}
+	G_WavesUpdateMaxStats( ent );
 }
 
 void G_WavesBuy( gentity_t *ent, const char *name ) {
@@ -1339,6 +1347,8 @@ void G_WavesTimerActions( gentity_t *ent ) {
 	gclient_t	*client = ent->client;
 	int			maxHealth = client->ps.stats[STAT_MAX_HEALTH];
 	int			regen;
+
+	G_WavesUpdateMaxStats( ent );
 
 	if ( ent->health > maxHealth ) {
 		ent->health--;
