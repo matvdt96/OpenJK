@@ -642,6 +642,15 @@ static void CG_RegisterSounds( void ) {
 	cgs.media.swordTrailShader			= trap->R_RegisterShader( "gfx/effects/sabers/swordTrail" );
 
 	cgs.media.forceCoronaShader			= trap->R_RegisterShaderNoMip( "gfx/hud/force_swirl" );
+	cgs.media.hudBarHealthTrack			= trap->R_RegisterShaderNoMip( "gfx/hud/bf_health_track" );
+	cgs.media.hudBarHealthFill			= trap->R_RegisterShaderNoMip( "gfx/hud/bf_health_fill" );
+	cgs.media.hudBarForceTrack			= trap->R_RegisterShaderNoMip( "gfx/hud/bf_force_track" );
+	cgs.media.hudBarForceFill			= trap->R_RegisterShaderNoMip( "gfx/hud/bf_force_fill" );
+	cgs.media.hudBarArmorTrack			= trap->R_RegisterShaderNoMip( "gfx/hud/bf_armor_track" );
+	cgs.media.hudBarArmorFill			= trap->R_RegisterShaderNoMip( "gfx/hud/bf_armor_fill" );
+	cgs.media.hudBarCircle				= trap->R_RegisterShaderNoMip( "gfx/hud/bf_circle" );
+	cgs.media.hudBarStyleLabels			= trap->R_RegisterShaderNoMip( "gfx/hud/bf_style_labels" );
+	cgs.media.hudBarDigits				= trap->R_RegisterShaderNoMip( "gfx/hud/bf_digits" );
 
 	cgs.media.yellowDroppedSaberShader	= trap->R_RegisterShader("gfx/effects/yellow_glow");
 
