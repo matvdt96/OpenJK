@@ -644,11 +644,23 @@ static int WP_ForceHealLevelValue( gentity_t *self, const char *list )
 	return values[lvl - FORCE_LEVEL_1];
 }
 
+// Full Force Heal of the current level, in health points or in percent of the max health
+static int WP_ForceHealFull( gentity_t *self )
+{
+	const int amount = WP_ForceHealLevelValue( self, g_forceHealAmount.string );
+
+	if ( amount > 0 && g_forceHealPercent.integer )
+	{
+		return Q_max( 1, amount * self->client->ps.stats[STAT_MAX_HEALTH] / 100 );
+	}
+	return amount;
+}
+
 // Health the next Force Heal gives, limited to what is missing
 static int WP_ForceHealAmount( gentity_t *self )
 {
 	const int missing = self->client->ps.stats[STAT_MAX_HEALTH] - self->health - self->client->forceHealPending;
-	int amount = WP_ForceHealLevelValue( self, g_forceHealAmount.string );
+	int amount = WP_ForceHealFull( self );
 
 	if ( amount < 0 )
 	{
@@ -660,7 +672,7 @@ static int WP_ForceHealAmount( gentity_t *self )
 // Force the next Force Heal costs, paid only for the health it gives; 0 keeps the original table
 static int WP_ForceHealCost( gentity_t *self )
 {
-	const int amount = WP_ForceHealLevelValue( self, g_forceHealAmount.string );
+	const int amount = WP_ForceHealFull( self );
 	const int cost = WP_ForceHealLevelValue( self, g_forceHealCost.string );
 
 	if ( amount <= 0 || cost < 0 )
