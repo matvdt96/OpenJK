@@ -1140,6 +1140,8 @@ typedef struct cgMedia_s {
 	qhandle_t	hudBarCircle;
 	qhandle_t	hudBarStyleLabels;
 	qhandle_t	hudBarDigits;
+	qhandle_t	hudBarAmmo;
+	qhandle_t	hudBarFonts[3];
 
 	qhandle_t	redSaberGlowShader;
 	qhandle_t	redSaberCoreShader;

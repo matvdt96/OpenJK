@@ -1343,6 +1343,10 @@ CG_DrawHUD
 #define HUDBAR_LABEL_ASPECT		(204.0f / 64.0f)
 #define HUDBAR_LABEL_HEIGHT		(0.67f * 64.0f / 52.0f)
 #define HUDBAR_LABEL_COUNT		5
+#define HUDBAR_AMMO_NUM_H		0.95f
+#define HUDBAR_AMMO_ICON_H		0.55f
+#define HUDBAR_AMMO_NAME_H		0.33f
+#define HUDBAR_AMMO_LOW			15
 
 static const vec4_t hudBarTrackColor = { 0.07f, 0.086f, 0.11f, 0.55f };
 static const vec4_t hudBarDarkColor = { 0.149f, 0.169f, 0.192f, 1.0f };
@@ -1350,6 +1354,8 @@ static const vec4_t hudBarHealthColor = { 0.949f, 0.761f, 0.196f, 1.0f };
 static const vec4_t hudBarForceColor = { 0.961f, 0.961f, 0.961f, 1.0f };
 static const vec4_t hudBarArmorColor = { 0.18f, 0.592f, 0.788f, 1.0f };
 static const vec4_t hudBarStyleOffColor = { 1.0f, 1.0f, 1.0f, 0.45f };
+static const vec4_t hudBarAmmoLowColor = { 1.0f, 0.541f, 0.239f, 1.0f };
+static const vec4_t hudBarAmmoNameColor = { 1.0f, 1.0f, 1.0f, 0.65f };
 
 // Horizontal size of one unit of height, so the bars keep their shape on wide screens
 static float CG_HudBarAspect( void )
@@ -1458,6 +1464,67 @@ static void CG_DrawHudSaberStyle( float x, float y, float w, float h )
 	trap->R_SetColor( NULL );
 }
 
+// Rajdhani in three widths (normal, 16:10, 16:9) so wide screens do not stretch the text
+static qhandle_t CG_HudBarFont( void )
+{
+	const float aspect = CG_HudBarAspect();
+	const int width = aspect > 0.92f ? 0 : aspect > 0.79f ? 1 : 2;
+
+	return cgs.media.hudBarFonts[width] ? cgs.media.hudBarFonts[width] : cgs.media.hudBarFonts[0];
+}
+
+// Ammo of the current weapon, right aligned with its bottom at y: weapon name above, cartridges icon and count, orange when low
+static void CG_DrawHudAmmo( float right, float bottom, float h )
+{
+	const int weapon = cg.snap->ps.weapon;
+	const float aspect = CG_HudBarAspect();
+	const float dh = h * HUDBAR_AMMO_NUM_H, dw = dh * HUDBAR_DIGIT_ASPECT * aspect;
+	const float iconH = h * HUDBAR_AMMO_ICON_H, iconW = iconH * aspect;
+	const qhandle_t font = CG_HudBarFont();
+	const float *color;
+	const char *text;
+	char name[128];
+	float x, scale;
+	int ammo, max, i;
+
+	if ( weapon <= WP_NONE || weapon >= WP_NUM_WEAPONS ||
+		( !weaponData[weapon].energyPerShot && !weaponData[weapon].altEnergyPerShot ) )
+	{
+		return;
+	}
+	ammo = cg.snap->ps.ammo[weaponData[weapon].ammoIndex];
+	if ( ammo < 0 )
+	{
+		return;
+	}
+	max = ammoData[weaponData[weapon].ammoIndex].max;
+	color = ( max > 0 && ammo * 100 <= max * HUDBAR_AMMO_LOW ) ? hudBarAmmoLowColor : hudBarForceColor;
+
+	text = va( "%i", ammo );
+	x = right - dw * strlen( text );
+	for ( i = 0; text[i]; i++ )
+	{
+		CG_DrawHudBarDigit( x + dw * i, bottom - dh, dw, dh, text[i] - '0', 0.0f, color );
+	}
+	trap->R_SetColor( color );
+	trap->R_DrawStretchPic( x - iconW - h * 0.2f * aspect, bottom - ( dh + iconH ) * 0.5f, iconW, iconH, 0, 0, 1, 1, cgs.media.hudBarAmmo );
+	trap->R_SetColor( NULL );
+
+	if ( !font || !cg_weapons[weapon].item )
+	{
+		return;
+	}
+	Q_strncpyz( name, cg_weapons[weapon].item->classname, sizeof( name ) );
+	if ( !trap->SE_GetStringTextString( va( "SP_INGAME_%s", Q_strupr( name ) ), name, sizeof( name ) ) )
+	{
+		Q_strncpyz( name, cg_weapons[weapon].item->classname, sizeof( name ) );
+	}
+	Q_strupr( name );
+	scale = h * HUDBAR_AMMO_NAME_H / Q_max( 1, trap->R_Font_HeightPixels( font, 1.0f ) );
+	trap->R_Font_DrawString( right - trap->R_Font_StrLenPixels( name, font, scale ), bottom - dh - h * HUDBAR_AMMO_NAME_H * 1.1f,
+		name, hudBarAmmoNameColor, font, -1, scale );
+}
+
 static void CG_DrawHudBars( void )
 {
 	const playerState_t *ps = &cg.snap->ps;
@@ -1480,6 +1547,10 @@ static void CG_DrawHudBars( void )
 	{
 		CG_DrawHudSaberStyle( SCREEN_WIDTH - HUDBAR_X - armorLength, SCREEN_HEIGHT - HUDBAR_BOTTOM - healthH - HUDBAR_GAP * scale - forceH,
 			armorLength, forceH );
+	}
+	else
+	{
+		CG_DrawHudAmmo( SCREEN_WIDTH - HUDBAR_X, SCREEN_HEIGHT - HUDBAR_BOTTOM - healthH - HUDBAR_GAP * scale, healthH );
 	}
 
 	if ( !ps->fd.forcePowersKnown )

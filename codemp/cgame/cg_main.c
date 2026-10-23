@@ -651,6 +651,10 @@ static void CG_RegisterSounds( void ) {
 	cgs.media.hudBarCircle				= trap->R_RegisterShaderNoMip( "gfx/hud/bf_circle" );
 	cgs.media.hudBarStyleLabels			= trap->R_RegisterShaderNoMip( "gfx/hud/bf_style_labels" );
 	cgs.media.hudBarDigits				= trap->R_RegisterShaderNoMip( "gfx/hud/bf_digits" );
+	cgs.media.hudBarAmmo				= trap->R_RegisterShaderNoMip( "gfx/hud/bf_ammo" );
+	cgs.media.hudBarFonts[0]			= trap->R_RegisterFont( "rajdhani" );
+	cgs.media.hudBarFonts[1]			= trap->R_RegisterFont( "rajdhani_n83" );
+	cgs.media.hudBarFonts[2]			= trap->R_RegisterFont( "rajdhani_n75" );
 
 	cgs.media.yellowDroppedSaberShader	= trap->R_RegisterShader("gfx/effects/yellow_glow");
 
