@@ -1734,8 +1734,10 @@ static const vec4_t uiWavesSelected		= { 0.141f, 0.11f, 0.031f, 1.0f };
 static const vec4_t uiWavesStatBox		= { 0.043f, 0.063f, 0.09f, 1.0f };
 static const vec4_t uiWavesDisabled		= { 0.165f, 0.184f, 0.216f, 1.0f };
 
-static float			uiWavesShopX, uiWavesShopY, uiWavesShopFade;
+static float			uiWavesShopX, uiWavesShopY, uiWavesShopUnitX, uiWavesShopUnitY, uiWavesShopFade;
 static int				uiWavesShopFont;
+static int				uiWavesShopFonts[3];
+static int				uiWavesShopFontCount = -1;
 static wavesShopHit_t	uiWavesShopHits[WAVES_SHOP_MAX_HITS];
 static int				uiWavesShopHitCount;
 
@@ -1830,7 +1832,7 @@ static void UI_WavesShopFill( float x, float y, float w, float h, const vec4_t c
 	vec4_t c;
 
 	UI_WavesShopColor( color, c );
-	UI_FillRect( uiWavesShopX + x * WAVES_SHOP_UNIT, uiWavesShopY + y * WAVES_SHOP_UNIT, w * WAVES_SHOP_UNIT, h * WAVES_SHOP_UNIT, c );
+	UI_FillRect( uiWavesShopX + x * uiWavesShopUnitX, uiWavesShopY + y * uiWavesShopUnitY, w * uiWavesShopUnitX, h * uiWavesShopUnitY, c );
 }
 
 static void UI_WavesShopBorder( float x, float y, float w, float h, float size, const vec4_t color ) {
@@ -1854,18 +1856,44 @@ static void UI_WavesShopPic( float x, float y, float w, float h, qhandle_t shade
 
 	UI_WavesShopColor( uiWavesWhite, c );
 	trap->R_SetColor( c );
-	UI_DrawHandlePic( uiWavesShopX + x * WAVES_SHOP_UNIT, uiWavesShopY + y * WAVES_SHOP_UNIT, w * WAVES_SHOP_UNIT, h * WAVES_SHOP_UNIT, shader );
+	UI_DrawHandlePic( uiWavesShopX + x * uiWavesShopUnitX, uiWavesShopY + y * uiWavesShopUnitY, w * uiWavesShopUnitX, h * uiWavesShopUnitY, shader );
 	trap->R_SetColor( NULL );
 }
 
-static float UI_WavesShopScale( float size ) {
-	float height = Text_Height( "", 1.0f, uiWavesShopFont );
+// Custom font in three widths (normal, 16:10, 16:9) so wide screens do not stretch the text
+static void UI_WavesShopLoadFont( void ) {
+	static const char	*suffixes[] = { "", "_n83", "_n75" };
+	int					i;
 
-	return height > 0 ? size * WAVES_SHOP_UNIT / height : 1.0f;
+	if ( uiWavesShopFontCount == ui_wavesShopFont.modificationCount ) {
+		return;
+	}
+	uiWavesShopFontCount = ui_wavesShopFont.modificationCount;
+	for ( i = 0; i < ARRAY_LEN( suffixes ); i++ ) {
+		uiWavesShopFonts[i] = ui_wavesShopFont.string[0] ? trap->R_RegisterFont( va( "%s%s", ui_wavesShopFont.string, suffixes[i] ) ) : 0;
+	}
+}
+
+static int UI_WavesShopFontHandle( int menuFont ) {
+	float	ratio = uiWavesShopUnitX / uiWavesShopUnitY;
+	int		width = ratio > 0.92f ? 0 : ratio > 0.79f ? 1 : 2;
+
+	UI_WavesShopLoadFont();
+	if ( uiWavesShopFonts[width] ) {
+		return uiWavesShopFonts[width];
+	}
+	return uiWavesShopFonts[0] ? uiWavesShopFonts[0] : MenuFontToHandle( menuFont );
+}
+
+static float UI_WavesShopScale( float size ) {
+	float height = trap->R_Font_HeightPixels( uiWavesShopFont, 1.0f );
+
+	return height > 0 ? size * uiWavesShopUnitY / height : 1.0f;
 }
 
 static float UI_WavesShopTextWidth( const char *text, float size ) {
-	return Text_Width( text, UI_WavesShopScale( size ), uiWavesShopFont ) / WAVES_SHOP_UNIT;
+	// measured 8x larger because the engine rounds widths up to whole virtual pixels
+	return trap->R_Font_StrLenPixels( text, uiWavesShopFont, UI_WavesShopScale( size ) * 8.0f ) / ( 8.0f * uiWavesShopUnitX );
 }
 
 // y is the vertical center of the text; returns the drawn width
@@ -1884,8 +1912,8 @@ static float UI_WavesShopText( float x, float y, float w, float size, const vec4
 		x += w - width;
 	}
 	UI_WavesShopColor( color, c );
-	Text_Paint( uiWavesShopX + x * WAVES_SHOP_UNIT, uiWavesShopY + ( y - size * 0.5f ) * WAVES_SHOP_UNIT,
-		UI_WavesShopScale( size ), c, text, 0, 0, ITEM_TEXTSTYLE_NORMAL, uiWavesShopFont );
+	trap->R_Font_DrawString( uiWavesShopX + x * uiWavesShopUnitX, uiWavesShopY + ( y - size * 0.5f ) * uiWavesShopUnitY,
+		text, c, uiWavesShopFont, -1, UI_WavesShopScale( size ) );
 	return width;
 }
 
@@ -1968,8 +1996,8 @@ static void UI_WavesShopHit( float x, float y, float w, float h, int type, int p
 }
 
 static qboolean UI_WavesShopHover( float x, float y, float w, float h ) {
-	float cx = ( uiInfo.uiDC.cursorx - uiWavesShopX ) / WAVES_SHOP_UNIT;
-	float cy = ( uiInfo.uiDC.cursory - uiWavesShopY ) / WAVES_SHOP_UNIT;
+	float cx = ( uiInfo.uiDC.cursorx - uiWavesShopX ) / uiWavesShopUnitX;
+	float cy = ( uiInfo.uiDC.cursory - uiWavesShopY ) / uiWavesShopUnitY;
 
 	return cx >= x && cx < x + w && cy >= y && cy < y + h;
 }
@@ -2043,7 +2071,7 @@ static void UI_WavesShopDrawCell( float x, float y, float w, float h, qboolean l
 	qboolean				maxed = price < 0;
 	qboolean				poor = !maxed && !UI_WavesShopCanBuy( index, itemLevel );
 	float					icon = large ? 44 : 40, top = large ? 10 : 8, bottom = large ? 8 : 6;
-	float					nameSize = large ? 13 : 12, nameLine = large ? 14 : 13, priceY;
+	float					nameSize = large ? 13 : 12, nameLine = large ? 14 : 13, nameY, pipsY, gap;
 	const char				*priceText;
 	const float				*priceColor;
 
@@ -2059,11 +2087,14 @@ static void UI_WavesShopDrawCell( float x, float y, float w, float h, qboolean l
 	if ( uiWavesShopIcons[index] != -1 ) {
 		UI_WavesShopPic( x + ( w - icon ) * 0.5f, y + top, icon, icon, uiWavesShopIcons[index] );
 	}
-	UI_WavesShopWrap( x + 4, y + top + icon + 4, w - 8, nameSize, nameLine, 2, uiWavesName, item->title, ITEM_ALIGN_CENTER );
+	// large cells spread the free space evenly, small ones use a 4 px gap
+	gap = large ? ( h - top - bottom - icon - nameLine * 2 - 6 - 16 ) / 3.0f : 4;
+	nameY = y + top + icon + gap;
+	pipsY = nameY + nameLine * 2 + gap;
+	UI_WavesShopWrap( x + 4, nameY, w - 8, nameSize, nameLine, 2, uiWavesName, item->title, ITEM_ALIGN_CENTER );
 
-	priceY = y + h - bottom - 8;
 	if ( item->numLevels > 1 ) {
-		UI_WavesShopPips( x + w * 0.5f, priceY - 14, 18, 6, 4, item->numLevels, itemLevel, qfalse );
+		UI_WavesShopPips( x + w * 0.5f, pipsY, 18, 6, 4, item->numLevels, itemLevel, qfalse );
 	}
 	if ( maxed ) {
 		priceText = item->numLevels > 1 ? "MAX" : "OWNED";
@@ -2073,7 +2104,7 @@ static void UI_WavesShopDrawCell( float x, float y, float w, float h, qboolean l
 		priceText = va( "%i", price );
 		priceColor = poor ? uiWavesRed : uiWavesWhite;
 	}
-	UI_WavesShopText( x, priceY, w, 13, priceColor, priceText, ITEM_ALIGN_CENTER );
+	UI_WavesShopText( x, pipsY + 6 + gap + 8, w, 13, priceColor, priceText, ITEM_ALIGN_CENTER );
 	uiWavesShopFade = 1.0f;
 }
 
@@ -2224,9 +2255,14 @@ static void UI_WavesShopDraw( rectDef_t *rect, int font ) {
 	int role = UI_WavesShopInventory( levels );
 	int selected = UI_WavesShopSelected( role );
 
-	uiWavesShopX = rect->x;
+	uiWavesShopUnitY = WAVES_SHOP_UNIT;
+	uiWavesShopUnitX = WAVES_SHOP_UNIT;
+	if ( ui_wavesShopAspect.integer && uiInfo.uiDC.glconfig.vidWidth > 0 && uiInfo.uiDC.glconfig.vidHeight > 0 ) {
+		uiWavesShopUnitX *= ( SCREEN_WIDTH * uiInfo.uiDC.glconfig.vidHeight ) / (float)( SCREEN_HEIGHT * uiInfo.uiDC.glconfig.vidWidth );
+	}
+	uiWavesShopX = rect->x + ( rect->w - WAVES_SHOP_WIDTH * uiWavesShopUnitX ) * 0.5f;
 	uiWavesShopY = rect->y;
-	uiWavesShopFont = font;
+	uiWavesShopFont = UI_WavesShopFontHandle( font );
 	uiWavesShopFade = 1.0f;
 	uiWavesShopHitCount = 0;
 
@@ -2246,8 +2282,8 @@ static qboolean UI_WavesShopHandleKey( int key ) {
 	if ( key != A_MOUSE1 ) {
 		return qfalse;
 	}
-	cx = ( uiInfo.uiDC.cursorx - uiWavesShopX ) / WAVES_SHOP_UNIT;
-	cy = ( uiInfo.uiDC.cursory - uiWavesShopY ) / WAVES_SHOP_UNIT;
+	cx = ( uiInfo.uiDC.cursorx - uiWavesShopX ) / uiWavesShopUnitX;
+	cy = ( uiInfo.uiDC.cursory - uiWavesShopY ) / uiWavesShopUnitY;
 	for ( i = 0; i < uiWavesShopHitCount; i++ ) {
 		if ( cx >= uiWavesShopHits[i].x && cx < uiWavesShopHits[i].x + uiWavesShopHits[i].w
 			&& cy >= uiWavesShopHits[i].y && cy < uiWavesShopHits[i].y + uiWavesShopHits[i].h ) {
