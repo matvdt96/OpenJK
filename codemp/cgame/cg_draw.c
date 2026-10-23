@@ -1549,6 +1549,7 @@ static void CG_DrawHudAmmo( float right, float bottom, float h )
 #define HUDWAVES_BOSS_H			30.0f
 #define HUDWAVES_BOSS_Y			52.0f
 #define HUDWAVES_GAIN_TIME		2000
+#define HUDWAVES_CREDITS_Y		( 424.0f / 720.0f )
 
 static float hudUpperRightY;
 
@@ -1599,7 +1600,7 @@ static float CG_HudDigits( float x, float y, float h, const vec4_t color, const 
 }
 
 // Credits for the shop in a pill, with the last gain shown beside it for a while
-static void CG_DrawHudCredits( float cx, float top, float u )
+static void CG_DrawHudCredits( float x, float top, float u )
 {
 	static int lastScore = -1, gain, gainTime;
 	const int score = cg.snap->ps.persistant[PERS_SCORE];
@@ -1608,7 +1609,6 @@ static void CG_DrawHudCredits( float cx, float top, float u )
 	const float icon = 18.0f * u, numH = 22.0f * u;
 	const char *text = va( "%i", score );
 	const float w = ( 14.0f + 18.0f + 10.0f + 18.0f ) * u * aspect + CG_HudDigits( 0, 0, numH, colorWhite, text, qfalse );
-	const float x = cx - w * 0.5f;
 	vec4_t gainColor;
 
 	if ( lastScore >= 0 && score > lastScore )
@@ -1777,8 +1777,7 @@ static void CG_DrawHudWaves( void )
 		return;
 	}
 
-	CG_DrawHudCredits( cx, y, u );
-	y += ( HUDWAVES_PILL_H + HUDWAVES_SPACING ) * u;
+	CG_DrawHudCredits( HUDBAR_X, SCREEN_HEIGHT * HUDWAVES_CREDITS_Y, u );
 	CG_DrawHudRadar( cx, y, u );
 	y += ( HUDWAVES_RADAR + HUDWAVES_SPACING ) * u;
 	if ( state == 2 )
