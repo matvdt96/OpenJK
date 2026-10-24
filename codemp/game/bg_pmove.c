@@ -7929,6 +7929,11 @@ static void PM_Weapon( void )
 		addTime *= 1.5;
 	}
 
+	if ( pm->ps->stats[STAT_FIRE_RATE] > 0 && pm->ps->weapon != WP_SABER && pm->ps->weapon != WP_MELEE )
+	{
+		addTime = addTime * 100 / ( 100 + pm->ps->stats[STAT_FIRE_RATE] );
+	}
+
 	pm->ps->weaponTime += addTime;
 }
 

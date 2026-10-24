@@ -603,7 +603,8 @@ typedef enum {
 	STAT_MAX_HEALTH,				// health / armor limit, changable by handicap
 	STAT_WAVES_ROLE,				// Waves gametype role (wavesRole_t)
 	STAT_MAX_ARMOR,					// armor limit for the hud bar, 0 = STAT_MAX_HEALTH
-	STAT_MAX_FORCE					// force limit for the hud bar, 0 = 100
+	STAT_MAX_FORCE,					// force limit for the hud bar, 0 = 100
+	STAT_FIRE_RATE					// percent of extra fire rate, 0 = none
 } statIndex_t;
 
 
@@ -1814,7 +1815,13 @@ typedef enum {
 	WAVES_ITEM_HEALTHREGEN,
 	WAVES_ITEM_FORCEREGEN,
 	WAVES_ITEM_MAXFORCE,
-	WAVES_ITEM_SHIELDREGEN
+	WAVES_ITEM_SHIELDREGEN,
+	WAVES_ITEM_FORCERESIST,
+	WAVES_ITEM_FIRERATE,
+	WAVES_ITEM_EXPLOSIVES,
+	WAVES_ITEM_AMMOREGEN,
+	WAVES_ITEM_STEADYAIM,
+	WAVES_ITEM_HOLDABLE
 } wavesItemType_t;
 
 typedef struct wavesShopItem_s {
@@ -1825,7 +1832,7 @@ typedef struct wavesShopItem_s {
 	int		role;		// WAVES_ROLE_NONE = both roles
 	int		type;		// wavesItemType_t
 	int		tab;		// shop tab, 0 = quick buy button
-	int		param;		// weapon or force power
+	int		param;		// weapon, force power or holdable item
 	int		amount[MAX_WAVES_ITEM_LEVELS];	// consumables: ammo given (first value); upgrades: bonus of each level, the last value repeats
 	int		baseLevel;	// level the force user starts with
 	int		numLevels;	// 0 = can be bought again and again at price[0]
@@ -1835,6 +1842,7 @@ typedef struct wavesShopItem_s {
 int BG_WavesLoadShop( wavesShopItem_t *items, int maxItems );
 int BG_WavesItemTotal( const wavesShopItem_t *item, int level );
 int BG_WavesItemPrice( const wavesShopItem_t *item, int level );
+qboolean BG_WavesHoldableKept( int holdable );
 
 // BG_Alloc room kept for the NPC structures of every entity slot, which are never freed:
 // gclient_t + gNPC_t on the server, clientInfo_t on the client

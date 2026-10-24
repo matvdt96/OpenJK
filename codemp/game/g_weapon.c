@@ -529,8 +529,8 @@ static void WP_FireBlaster( gentity_t *ent, qboolean altFire )
 	if ( altFire )
 	{
 		// add some slop to the alt-fire direction
-		angs[PITCH] += Q_flrand(-1.0f, 1.0f) * BLASTER_SPREAD;
-		angs[YAW]       += Q_flrand(-1.0f, 1.0f) * BLASTER_SPREAD;
+		angs[PITCH] += Q_flrand(-1.0f, 1.0f) * BLASTER_SPREAD * G_WavesSpreadScale( ent );
+		angs[YAW]       += Q_flrand(-1.0f, 1.0f) * BLASTER_SPREAD * G_WavesSpreadScale( ent );
 	}
 
 	AngleVectors( angs, dir, NULL, NULL );
@@ -1094,8 +1094,8 @@ static void WP_BowcasterMainFire( gentity_t *ent )
 		vectoangles( forward, angs );
 
 		// add some slop to the alt-fire direction
-		angs[PITCH] += Q_flrand(-1.0f, 1.0f) * BOWCASTER_ALT_SPREAD * 0.2f;
-		angs[YAW]	+= ((i+0.5f) * BOWCASTER_ALT_SPREAD - count * 0.5f * BOWCASTER_ALT_SPREAD );
+		angs[PITCH] += Q_flrand(-1.0f, 1.0f) * BOWCASTER_ALT_SPREAD * 0.2f * G_WavesSpreadScale( ent );
+		angs[YAW]	+= ((i+0.5f) * BOWCASTER_ALT_SPREAD - count * 0.5f * BOWCASTER_ALT_SPREAD ) * G_WavesSpreadScale( ent );
 
 		AngleVectors( angs, dir, NULL, NULL );
 
@@ -1210,8 +1210,8 @@ static void WP_FireRepeater( gentity_t *ent, qboolean altFire )
 	else
 	{
 		// add some slop to the alt-fire direction
-		angs[PITCH] += Q_flrand(-1.0f, 1.0f) * REPEATER_SPREAD;
-		angs[YAW]	+= Q_flrand(-1.0f, 1.0f) * REPEATER_SPREAD;
+		angs[PITCH] += Q_flrand(-1.0f, 1.0f) * REPEATER_SPREAD * G_WavesSpreadScale( ent );
+		angs[YAW]	+= Q_flrand(-1.0f, 1.0f) * REPEATER_SPREAD * G_WavesSpreadScale( ent );
 
 		AngleVectors( angs, dir, NULL, NULL );
 
@@ -1529,8 +1529,8 @@ static void WP_FlechetteMainFire( gentity_t *ent )
 
 		if (i != 0)
 		{ //do nothing on the first shot, it will hit the crosshairs
-			angs[PITCH] += Q_flrand(-1.0f, 1.0f) * FLECHETTE_SPREAD;
-			angs[YAW]	+= Q_flrand(-1.0f, 1.0f) * FLECHETTE_SPREAD;
+			angs[PITCH] += Q_flrand(-1.0f, 1.0f) * FLECHETTE_SPREAD * G_WavesSpreadScale( ent );
+			angs[YAW]	+= Q_flrand(-1.0f, 1.0f) * FLECHETTE_SPREAD * G_WavesSpreadScale( ent );
 		}
 
 		AngleVectors( angs, fwd, NULL, NULL );
@@ -4495,6 +4495,8 @@ FireWeapon
 int BG_EmplacedView(vec3_t baseAngles, vec3_t angles, float *newYaw, float constraint);
 
 void FireWeapon( gentity_t *ent, qboolean altFire ) {
+	G_WavesWeaponFired( ent );
+
 	// track shots taken for accuracy tracking. melee weapons are not tracked.
 	if( ent->s.weapon != WP_SABER && ent->s.weapon != WP_STUN_BATON && ent->s.weapon != WP_MELEE )
 	{

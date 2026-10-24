@@ -1505,6 +1505,9 @@ static const char *UI_WavesShopIconName( const wavesShopItem_t *item ) {
 		return gitem ? gitem->icon : NULL;
 	case WAVES_ITEM_POWER:
 		return HolocronIcons[item->param];
+	case WAVES_ITEM_HOLDABLE:
+		gitem = BG_FindItemForHoldable( (holdable_t)item->param );
+		return gitem ? gitem->icon : NULL;
 	case WAVES_ITEM_AMMO:
 		return "gfx/mp/ammo_power_cell";
 	case WAVES_ITEM_MAXHEALTH:
@@ -1688,7 +1691,7 @@ static void UI_WavesCharacterChoose( void ) {
 	Menus_CloseAll();
 }
 
-#define WAVES_SHOP_TABS			3
+#define WAVES_SHOP_TABS			4
 #define WAVES_SHOP_DOUBLECLICK	400
 #define WAVES_SHOP_UNIT			( 2.0f / 3.0f )
 #define WAVES_SHOP_WIDTH		840
@@ -1710,9 +1713,9 @@ typedef struct wavesShopHit_s {
 } wavesShopHit_t;
 
 static const char *uiWavesShopTabNames[WAVES_ROLE_GUNNER + 1][WAVES_SHOP_TABS] = {
-	{ "", "", "" },
-	{ "POWERS", "SABER", "UPGRADES" },
-	{ "WEAPONS", "EXPLOSIVES", "UPGRADES" }
+	{ "", "", "", "" },
+	{ "POWERS", "SABER", "UPGRADES", "" },
+	{ "WEAPONS", "EXPLOSIVES", "UPGRADES", "GADGETS" }
 };
 
 static const vec4_t uiWavesAmber		= { 1.0f, 0.682f, 0.0f, 1.0f };
@@ -1798,6 +1801,17 @@ static qboolean UI_WavesShopStat( const wavesShopItem_t *item, const char **labe
 	case WAVES_ITEM_FORCEDAMAGE:	*label = "FORCE POWER DAMAGE";	return qtrue;
 	case WAVES_ITEM_MAXAMMO:		*label = "MAX AMMO";			return qtrue;
 	case WAVES_ITEM_FORCEREGEN:		*label = "FORCE REGENERATION";	return qtrue;
+	case WAVES_ITEM_FORCERESIST:	*label = "FORCE RESISTANCE";	return qtrue;
+	case WAVES_ITEM_FIRERATE:		*label = "FIRE RATE";			return qtrue;
+	case WAVES_ITEM_EXPLOSIVES:		*label = "EXPLOSION DAMAGE AND RADIUS";	return qtrue;
+	case WAVES_ITEM_AMMOREGEN:
+		*label = "AMMO REGENERATION";
+		*format = "%i%%/10s";
+		return qtrue;
+	case WAVES_ITEM_STEADYAIM:
+		*label = "SPREAD";
+		*format = "-%i%%";
+		return qtrue;
 	case WAVES_ITEM_MAXHEALTH:
 		*label = "MAX HEALTH";
 		*format = "%i";

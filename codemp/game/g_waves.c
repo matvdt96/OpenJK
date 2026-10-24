@@ -37,6 +37,8 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #define WAVES_BOSS_POINTS		500
 #define WAVES_ROUND_POINTS		100
 #define WAVES_REGEN_DELAY		5000
+#define WAVES_MAX_RESIST		90
+#define WAVES_GRIP_TIME			4000
 
 extern gentity_t *NPC_SpawnTypeAt( vec3_t origin, float yaw, char *npc_type, char *targetname, qboolean isVehicle, team_t teamowner );
 extern void NPC_Begin( gentity_t *ent );
@@ -761,6 +763,56 @@ int G_WavesForceRegenTime( gentity_t *ent, int regenTime ) {
 	return regenTime * 100 / ( 100 + G_WavesBonus( ent, WAVES_ITEM_FORCEREGEN ) );
 }
 
+// Percent of an enemy force power a player shrugs off, 0 = all of it lands
+int G_WavesForceResist( gentity_t *target, gentity_t *attacker ) {
+	if ( level.gametype != GT_WAVES || !target || !target->client || target->s.number >= MAX_CLIENTS
+		|| !attacker || attacker->s.number < MAX_CLIENTS ) {
+		return 0;
+	}
+	return Q_min( G_WavesBonus( target, WAVES_ITEM_FORCERESIST ), WAVES_MAX_RESIST );
+}
+
+qboolean G_WavesGripResisted( gentity_t *target, gentity_t *attacker ) {
+	const int resist = G_WavesForceResist( target, attacker );
+
+	return resist > 0 && level.time - target->client->ps.fd.forceGripStarted > WAVES_GRIP_TIME * ( 100 - resist ) / 100;
+}
+
+static qboolean G_WavesExplosive( int mod ) {
+	switch ( mod ) {
+	case MOD_REPEATER_ALT:
+	case MOD_REPEATER_ALT_SPLASH:
+	case MOD_FLECHETTE_ALT_SPLASH:
+	case MOD_ROCKET:
+	case MOD_ROCKET_SPLASH:
+	case MOD_ROCKET_HOMING:
+	case MOD_ROCKET_HOMING_SPLASH:
+	case MOD_THERMAL:
+	case MOD_THERMAL_SPLASH:
+	case MOD_TRIP_MINE_SPLASH:
+	case MOD_TIMED_MINE_SPLASH:
+	case MOD_DET_PACK_SPLASH:
+	case MOD_CONC:
+		return qtrue;
+	default:
+		return qfalse;
+	}
+}
+
+float G_WavesSplashRadius( gentity_t *attacker, float radius, int mod ) {
+	if ( level.gametype != GT_WAVES || !attacker || !attacker->client || attacker->s.number >= MAX_CLIENTS || !G_WavesExplosive( mod ) ) {
+		return radius;
+	}
+	return radius * ( 100 + G_WavesBonus( attacker, WAVES_ITEM_EXPLOSIVES ) ) / 100.0f;
+}
+
+float G_WavesSpreadScale( gentity_t *ent ) {
+	if ( level.gametype != GT_WAVES || !ent || !ent->client || ent->s.number >= MAX_CLIENTS ) {
+		return 1.0f;
+	}
+	return Q_max( 0, 100 - G_WavesBonus( ent, WAVES_ITEM_STEADYAIM ) ) / 100.0f;
+}
+
 static int G_WavesMaxHealth( gentity_t *ent ) {
 	return WAVES_BASE_HEALTH + G_WavesBonus( ent, WAVES_ITEM_MAXHEALTH );
 }
@@ -773,10 +825,11 @@ static int G_WavesMaxForce( gentity_t *ent ) {
 	return WAVES_BASE_FORCE + G_WavesBonus( ent, WAVES_ITEM_MAXFORCE );
 }
 
-// Limits the hud bars are drawn against
-static void G_WavesUpdateMaxStats( gentity_t *ent ) {
+// Shop bonuses the client needs: the limits the hud bars are drawn against and the fire rate
+static void G_WavesUpdateStats( gentity_t *ent ) {
 	ent->client->ps.stats[STAT_MAX_ARMOR] = G_WavesMaxShield( ent );
 	ent->client->ps.stats[STAT_MAX_FORCE] = ent->client->ps.fd.forcePowerMax;
+	ent->client->ps.stats[STAT_FIRE_RATE] = G_WavesBonus( ent, WAVES_ITEM_FIRERATE );
 }
 
 static void G_WavesSendInventory( gentity_t *ent ) {
@@ -877,6 +930,16 @@ void G_WavesUpdateSabers( gentity_t *ent, const char *userinfo ) {
 	}
 }
 
+static void G_WavesGiveHoldable( gentity_t *ent, int holdable ) {
+	gclient_t *client = ent->client;
+
+	client->ps.stats[STAT_HOLDABLE_ITEMS] |= (1 << holdable);
+	client->pers.waves.holdables |= (1 << holdable);
+	if ( !client->ps.stats[STAT_HOLDABLE_ITEM] || !(client->ps.stats[STAT_HOLDABLE_ITEMS] & (1 << bg_itemlist[client->ps.stats[STAT_HOLDABLE_ITEM]].giTag)) ) {
+		client->ps.stats[STAT_HOLDABLE_ITEM] = BG_GetItemIndexByTag( holdable, IT_HOLDABLE );
+	}
+}
+
 void G_WavesApplyLoadout( gentity_t *ent ) {
 	gclient_t	*client = ent->client;
 	int			role = client->pers.waves.role ? client->pers.waves.role : WAVES_ROLE_FORCE;
@@ -925,6 +988,13 @@ void G_WavesApplyLoadout( gentity_t *ent ) {
 		}
 	}
 
+	for ( i = 0; i < numShopItems; i++ ) {
+		if ( shopItems[i].type == WAVES_ITEM_HOLDABLE && ( client->pers.waves.levels[i] || (client->pers.waves.holdables & (1 << shopItems[i].param)) )
+			&& ( shopItems[i].role == WAVES_ROLE_NONE || shopItems[i].role == role ) ) {
+			G_WavesGiveHoldable( ent, shopItems[i].param );
+		}
+	}
+
 	maxHealth = G_WavesMaxHealth( ent );
 	maxShield = G_WavesMaxShield( ent );
 	client->pers.maxHealth = client->ps.stats[STAT_MAX_HEALTH] = maxHealth;
@@ -934,7 +1004,7 @@ void G_WavesApplyLoadout( gentity_t *ent ) {
 	}
 	client->ps.fd.forcePowerMax = role == WAVES_ROLE_FORCE ? G_WavesMaxForce( ent ) : WAVES_BASE_FORCE;
 	client->ps.fd.forcePower = client->ps.fd.forcePowerMax;
-	G_WavesUpdateMaxStats( ent );
+	G_WavesUpdateStats( ent );
 
 	G_WavesSendInventory( ent );
 }
@@ -952,6 +1022,7 @@ void G_WavesSaveConsumables( gentity_t *ent ) {
 			ent->client->pers.waves.consumables[ammo] = ent->client->ps.ammo[ammo];
 		}
 	}
+	ent->client->pers.waves.holdables = ent->client->ps.stats[STAT_HOLDABLE_ITEMS];
 }
 
 static qboolean G_WavesCanChangeRole( gentity_t *ent ) {
@@ -1026,6 +1097,9 @@ static void G_WavesApplyItem( gentity_t *ent, const wavesShopItem_t *item, int i
 	case WAVES_ITEM_POWER:
 		G_WavesSetPower( ent, item->param, itemLevel );
 		break;
+	case WAVES_ITEM_HOLDABLE:
+		G_WavesGiveHoldable( ent, item->param );
+		break;
 	case WAVES_ITEM_MAXHEALTH:
 		client->pers.maxHealth = client->ps.stats[STAT_MAX_HEALTH] = G_WavesMaxHealth( ent );
 		ent->health += item->amount[itemLevel - 1];
@@ -1051,7 +1125,7 @@ static void G_WavesApplyItem( gentity_t *ent, const wavesShopItem_t *item, int i
 	default:
 		break;
 	}
-	G_WavesUpdateMaxStats( ent );
+	G_WavesUpdateStats( ent );
 }
 
 void G_WavesBuy( gentity_t *ent, const char *name ) {
@@ -1083,6 +1157,11 @@ void G_WavesBuy( gentity_t *ent, const char *name ) {
 		trap->SendServerCommand( ent->s.number, "print \"Your shield is already full\n\"" );
 		return;
 	}
+	if ( item->type == WAVES_ITEM_HOLDABLE && !item->numLevels
+		&& ( (G_WavesPlayerAlive( ent ) ? client->ps.stats[STAT_HOLDABLE_ITEMS] : client->pers.waves.holdables) & (1 << item->param) ) ) {
+		trap->SendServerCommand( ent->s.number, va( "print \"You already carry %s\n\"", item->title ) );
+		return;
+	}
 
 	itemLevel = G_WavesItemLevel( ent, index );
 	price = BG_WavesItemPrice( item, itemLevel );
@@ -1106,6 +1185,9 @@ void G_WavesBuy( gentity_t *ent, const char *name ) {
 		if ( client->pers.waves.consumables[ammo] > G_WavesMaxAmmo( ent, ammo ) ) {
 			client->pers.waves.consumables[ammo] = G_WavesMaxAmmo( ent, ammo );
 		}
+	}
+	else if ( item->type == WAVES_ITEM_HOLDABLE && !G_WavesPlayerAlive( ent ) ) {
+		client->pers.waves.holdables |= (1 << item->param);
 	}
 	else if ( G_WavesPlayerAlive( ent ) ) {
 		G_WavesApplyItem( ent, item, itemLevel + 1 );
@@ -1150,12 +1232,45 @@ static void G_WavesUpdateConfigstring( void ) {
 	}
 }
 
+// Enemies lose track of a cloaked player: notarget while the cloak is on
+static void G_WavesUpdateCloak( void ) {
+	int	i;
+
+	for ( i = 0; i < MAX_CLIENTS; i++ ) {
+		gentity_t	*ent = &g_entities[i];
+		qboolean	cloaked;
+
+		if ( !ent->inuse || !ent->client ) {
+			continue;
+		}
+		cloaked = ent->client->ps.powerups[PW_CLOAKED] && ent->health > 0;
+		if ( cloaked && !(ent->flags & FL_NOTARGET) ) {
+			ent->flags |= FL_NOTARGET;
+			ent->client->pers.waves.cloakNotarget = qtrue;
+		}
+		else if ( !cloaked && ent->client->pers.waves.cloakNotarget ) {
+			ent->flags &= ~FL_NOTARGET;
+			ent->client->pers.waves.cloakNotarget = qfalse;
+		}
+	}
+}
+
+extern void Jedi_Decloak( gentity_t *self );
+
+// Shooting gives a cloaked player away
+void G_WavesWeaponFired( gentity_t *ent ) {
+	if ( level.gametype == GT_WAVES && ent->client && ent->s.number < MAX_CLIENTS && ent->client->ps.powerups[PW_CLOAKED] ) {
+		Jedi_Decloak( ent );
+	}
+}
+
 void G_WavesRunFrame( void ) {
 	if ( level.intermissiontime ) {
 		return;
 	}
 
 	G_WavesUpdateConfigstring();
+	G_WavesUpdateCloak();
 
 	G_WavesPruneDead();
 
@@ -1318,7 +1433,7 @@ void G_WavesPaySaberBlock( gentity_t *blocker, gentity_t *attacker, int damage )
 }
 
 int G_WavesScaleDamage( gentity_t *targ, gentity_t *attacker, int damage, int mod ) {
-	int	i;
+	int	i, bonus;
 
 	if ( targ->client && targ->s.number < MAX_CLIENTS ) {
 		targ->client->pers.waves.lastHurtTime = level.time;
@@ -1330,17 +1445,46 @@ int G_WavesScaleDamage( gentity_t *targ, gentity_t *attacker, int damage, int mo
 		if ( targ->s.eType != ET_NPC ) {
 			return damage;
 		}
-		return (int)( damage * ( 100 + G_WavesBonus( attacker, G_WavesDamageType( mod ) ) ) / 100.0f + 0.5f );
+		bonus = G_WavesBonus( attacker, G_WavesDamageType( mod ) );
+		if ( G_WavesExplosive( mod ) ) {
+			bonus += G_WavesBonus( attacker, WAVES_ITEM_EXPLOSIVES );
+		}
+		return (int)( damage * ( 100 + bonus ) / 100.0f + 0.5f );
 	}
 	if ( attacker->s.eType != ET_NPC ) {
 		return damage;
 	}
 	for ( i = 0; i < waves.numAlive; i++ ) {
 		if ( waves.alive[i].num == attacker->s.number ) {
-			return (int)(damage * G_WavesRoundScale( wavesSettings.damagePerRound, wavesSettings.damageMax ));
+			damage = (int)(damage * G_WavesRoundScale( wavesSettings.damagePerRound, wavesSettings.damageMax ));
+			break;
 		}
 	}
+	if ( mod == MOD_FORCE_DARK ) {
+		damage = damage * ( 100 - G_WavesForceResist( targ, attacker ) ) / 100;
+	}
 	return damage;
+}
+
+// Refills the ammo of the weapon in hand by a percent of its maximum every 10 seconds
+static void G_WavesRegenAmmo( gentity_t *ent ) {
+	gclient_t	*client = ent->client;
+	const int	ammo = weaponData[client->ps.weapon].ammoIndex;
+	const int	regen = G_WavesBonus( ent, WAVES_ITEM_AMMOREGEN );
+	int			max;
+
+	if ( regen <= 0 || ammo <= AMMO_FORCE || ammo >= AMMO_EMPLACED ) {
+		client->pers.waves.ammoRegenFrac = 0;
+		return;
+	}
+	max = G_WavesMaxAmmo( ent, ammo );
+	if ( client->ps.ammo[ammo] >= max ) {
+		client->pers.waves.ammoRegenFrac = 0;
+		return;
+	}
+	client->pers.waves.ammoRegenFrac += max * regen;
+	client->ps.ammo[ammo] = Q_min( client->ps.ammo[ammo] + client->pers.waves.ammoRegenFrac / 1000, max );
+	client->pers.waves.ammoRegenFrac %= 1000;
 }
 
 void G_WavesTimerActions( gentity_t *ent ) {
@@ -1348,7 +1492,7 @@ void G_WavesTimerActions( gentity_t *ent ) {
 	int			maxHealth = client->ps.stats[STAT_MAX_HEALTH];
 	int			regen;
 
-	G_WavesUpdateMaxStats( ent );
+	G_WavesUpdateStats( ent );
 
 	if ( ent->health > maxHealth ) {
 		ent->health--;
@@ -1368,6 +1512,10 @@ void G_WavesTimerActions( gentity_t *ent ) {
 		if ( regen > 0 ) {
 			client->ps.stats[STAT_ARMOR] = Q_min( client->ps.stats[STAT_ARMOR] + regen, G_WavesMaxShield( ent ) );
 		}
+	}
+
+	if ( G_WavesPlayerAlive( ent ) ) {
+		G_WavesRegenAmmo( ent );
 	}
 }
 

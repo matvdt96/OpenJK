@@ -509,6 +509,9 @@ typedef struct clientPersistant_s {
 		int		consumables[AMMO_MAX];			// consumable ammo kept across deaths
 		qboolean	joined;						// has spawned in the game, role is locked
 		int		lastHurtTime;					// health regeneration waits after this
+		int		ammoRegenFrac;					// thousandths of ammo regenerated but not given yet
+		int		holdables;						// holdable items kept across deaths
+		qboolean	cloakNotarget;				// notarget was set by the cloak
 	} waves;
 } clientPersistant_t;
 
@@ -1395,6 +1398,11 @@ qboolean G_WavesSpawnNearTeammate( gentity_t *ent, vec3_t origin, vec3_t angles 
 int G_WavesScaleDamage( gentity_t *targ, gentity_t *attacker, int damage, int mod );
 int G_WavesMaxAmmo( gentity_t *ent, int ammo );
 int G_WavesForceRegenTime( gentity_t *ent, int regenTime );
+int G_WavesForceResist( gentity_t *target, gentity_t *attacker );
+qboolean G_WavesGripResisted( gentity_t *target, gentity_t *attacker );
+float G_WavesSplashRadius( gentity_t *attacker, float radius, int mod );
+float G_WavesSpreadScale( gentity_t *ent );
+void G_WavesWeaponFired( gentity_t *ent );
 qboolean G_WavesGuardBroken( gentity_t *blocker, gentity_t *attacker, int damage );
 void G_WavesPaySaberBlock( gentity_t *blocker, gentity_t *attacker, int damage );
 void G_WavesTimerActions( gentity_t *ent );

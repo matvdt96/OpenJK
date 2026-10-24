@@ -3450,6 +3450,8 @@ static void ForceThrowCharged( gentity_t *self, qboolean pull, float charge )
 				qboolean canPullWeapon = qtrue;
 				qboolean countered = qfalse;
 				float dirLen = 0;
+				const int resist = G_WavesForceResist( push_list[x], self );
+				const qboolean resisted = resist > 0 && Q_irand( 1, 100 ) <= resist;
 
 				if ( g_debugMelee.integer )
 				{
@@ -3461,7 +3463,7 @@ static void ForceThrowCharged( gentity_t *self, qboolean pull, float charge )
 					}
 				}
 
-				pushPowerMod = pushPower;
+				pushPowerMod = pushPower * ( 100 - resist ) / 100;
 
 				if (push_list[x]->client->pers.cmd.forwardmove ||
 					push_list[x]->client->pers.cmd.rightmove)
@@ -3553,7 +3555,7 @@ static void ForceThrowCharged( gentity_t *self, qboolean pull, float charge )
 							randfact = 10;
 						}
 
-						if (!OnSameTeam(self, push_list[x]) && Q_irand(1, 10) <= randfact && canPullWeapon)
+						if (!OnSameTeam(self, push_list[x]) && Q_irand(1, 10) <= randfact && canPullWeapon && !resisted)
 						{
 							vec3_t uorg, vecnorm;
 
@@ -3572,7 +3574,7 @@ static void ForceThrowCharged( gentity_t *self, qboolean pull, float charge )
 					VectorSubtract( thispush_org, self->client->ps.origin, pushDir );
 				}
 
-				if (fullCharge && modPowerLevel == powerLevel &&
+				if (fullCharge && modPowerLevel == powerLevel && !resisted &&
 					push_list[x]->client->ps.forceHandExtend != HANDEXTEND_KNOCKDOWN &&
 					BG_KnockDownable(&push_list[x]->client->ps))
 				{ //a fully charged push knocks down anyone it reaches
@@ -3589,7 +3591,7 @@ static void ForceThrowCharged( gentity_t *self, qboolean pull, float charge )
 					{
 						dirLen = VectorLength(pushDir);
 
-						if (BG_KnockDownable(&push_list[x]->client->ps) &&
+						if (BG_KnockDownable(&push_list[x]->client->ps) && !resisted &&
 							dirLen <= (64*((modPowerLevel - otherPushPower)-1)))
 						{ //can only do a knockdown if fairly close
 							push_list[x]->client->ps.forceHandExtend = HANDEXTEND_KNOCKDOWN;
@@ -4403,7 +4405,7 @@ void DoGripAction(gentity_t *self, forcePowers_t forcePower)
 		gripLevel = self->client->ps.fd.forcePowerLevel[FP_GRIP];
 	}
 
-	if (!gripLevel)
+	if (!gripLevel || G_WavesGripResisted(gripEnt, self))
 	{
 		WP_ForcePowerStop(self, forcePower);
 		return;
@@ -5133,11 +5135,11 @@ void FindGenericEnemyIndex(gentity_t *self)
 	float blen = 99999999.9f;
 	vec3_t a;
 
-	while (i < MAX_CLIENTS)
+	while (i < (level.gametype == GT_WAVES ? level.num_entities : MAX_CLIENTS))
 	{
 		ent = &g_entities[i];
 
-		if (ent && ent->client && ent->s.number != self->s.number && ent->health > 0 && !OnSameTeam(self, ent) && ent->client->ps.pm_type != PM_INTERMISSION && ent->client->ps.pm_type != PM_SPECTATOR)
+		if (ent && ent->inuse && ent->client && ent->s.number != self->s.number && ent->health > 0 && !OnSameTeam(self, ent) && ent->client->ps.pm_type != PM_INTERMISSION && ent->client->ps.pm_type != PM_SPECTATOR)
 		{
 			VectorSubtract(ent->client->ps.origin, self->client->ps.origin, a);
 			tlen = VectorLength(a);

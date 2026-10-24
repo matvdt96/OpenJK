@@ -5639,6 +5639,8 @@ qboolean G_RadiusDamage ( vec3_t origin, gentity_t *attacker, float damage, floa
 	qboolean	hitClient = qfalse;
 	qboolean	roastPeople = qfalse;
 
+	radius = G_WavesSplashRadius( attacker, radius, mod );
+
 	/*
 	if (missile && !missile->client && missile->s.weapon > WP_NONE &&
 		missile->s.weapon < WP_NUM_WEAPONS && missile->r.ownerNum >= 0 &&

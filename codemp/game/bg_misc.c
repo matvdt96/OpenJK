@@ -3099,6 +3099,7 @@ int BG_ModelCache(const char *modelName, const char *skinName)
 
 extern stringID_table_t WPTable[];
 extern stringID_table_t FPTable[];
+extern stringID_table_t HoldableTable[];
 
 static int BG_WavesParseId( stringID_table_t *table, const char *name, const char *item ) {
 	int id = GetIDForString( table, name );
@@ -3182,6 +3183,12 @@ static qboolean BG_WavesParseItem( const char **p, wavesShopItem_t *item ) {
 			else if ( !Q_stricmp( token, "healthregen" ) )	item->type = WAVES_ITEM_HEALTHREGEN;
 			else if ( !Q_stricmp( token, "forceregen" ) )	item->type = WAVES_ITEM_FORCEREGEN;
 			else if ( !Q_stricmp( token, "shieldregen" ) )	item->type = WAVES_ITEM_SHIELDREGEN;
+			else if ( !Q_stricmp( token, "forceresist" ) )	item->type = WAVES_ITEM_FORCERESIST;
+			else if ( !Q_stricmp( token, "firerate" ) )		item->type = WAVES_ITEM_FIRERATE;
+			else if ( !Q_stricmp( token, "explosives" ) )	item->type = WAVES_ITEM_EXPLOSIVES;
+			else if ( !Q_stricmp( token, "ammoregen" ) )	item->type = WAVES_ITEM_AMMOREGEN;
+			else if ( !Q_stricmp( token, "steadyaim" ) )	item->type = WAVES_ITEM_STEADYAIM;
+			else if ( !Q_stricmp( token, "holdable" ) )		item->type = WAVES_ITEM_HOLDABLE;
 			else Com_Printf( S_COLOR_YELLOW "%s: unknown type '%s'\n", WAVES_SHOP_FILE, token );
 		}
 		else if ( !Q_stricmp( key, "weapon" ) ) {
@@ -3189,6 +3196,9 @@ static qboolean BG_WavesParseItem( const char **p, wavesShopItem_t *item ) {
 		}
 		else if ( !Q_stricmp( key, "power" ) ) {
 			item->param = BG_WavesParseId( FPTable, token, item->name );
+		}
+		else if ( !Q_stricmp( key, "holdable" ) ) {
+			item->param = BG_WavesParseId( HoldableTable, token, item->name );
 		}
 		else if ( !Q_stricmp( key, "base" ) ) {
 			item->baseLevel = atoi( token );
@@ -3202,13 +3212,15 @@ static qboolean BG_WavesParseItem( const char **p, wavesShopItem_t *item ) {
 		Com_Printf( S_COLOR_YELLOW "%s: item without name or price skipped\n", WAVES_SHOP_FILE );
 		return qfalse;
 	}
-	if ( (item->type == WAVES_ITEM_WEAPON || item->type == WAVES_ITEM_CONSUMABLE || item->type == WAVES_ITEM_POWER) && item->param < 0 ) {
+	if ( (item->type == WAVES_ITEM_WEAPON || item->type == WAVES_ITEM_CONSUMABLE || item->type == WAVES_ITEM_POWER
+		|| item->type == WAVES_ITEM_HOLDABLE) && item->param < 0 ) {
 		return qfalse;
 	}
 	if ( !item->title[0] ) {
 		Q_strncpyz( item->title, item->name, sizeof( item->title ) );
 	}
-	if ( item->type == WAVES_ITEM_AMMO || item->type == WAVES_ITEM_CONSUMABLE || item->type == WAVES_ITEM_SHIELD ) {
+	if ( item->type == WAVES_ITEM_AMMO || item->type == WAVES_ITEM_CONSUMABLE || item->type == WAVES_ITEM_SHIELD
+		|| ( item->type == WAVES_ITEM_HOLDABLE && !BG_WavesHoldableKept( item->param ) ) ) {
 		item->numLevels = 0;
 	}
 	if ( !numAmounts ) {
@@ -3220,6 +3232,12 @@ static qboolean BG_WavesParseItem( const char **p, wavesShopItem_t *item ) {
 		item->amount[i] = item->amount[numAmounts - 1];
 	}
 	return qtrue;
+}
+
+// Holdable items that are not used up, bought once like an upgrade
+qboolean BG_WavesHoldableKept( int holdable ) {
+	return holdable == HI_BINOCULARS || holdable == HI_JETPACK || holdable == HI_HEALTHDISP || holdable == HI_AMMODISP
+		|| holdable == HI_EWEB || holdable == HI_CLOAK;
 }
 
 // Bonus of the first level levels of an upgrade
