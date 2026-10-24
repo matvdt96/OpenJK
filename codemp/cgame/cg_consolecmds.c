@@ -107,6 +107,30 @@ static void CG_ForceRepulseUp_f( void ) {
 	trap->SendClientCommand( "forcerepulse 0" );
 }
 
+static void CG_GadgetsDown_f( void ) {
+	cg.gadgetsHeld = qtrue;
+	cg.invenSelectTime = cg.time;
+}
+
+static void CG_GadgetsUp_f( void ) {
+	cg.gadgetsHeld = qfalse;
+	cg.invenSelectTime = 0;
+}
+
+static void CG_ForcePowersDown_f( void ) {
+	cg.powersHeld = qtrue;
+	cg.forceSelectTime = cg.time;
+	if ( cg.forceSelect == -1 && cg.snap ) {
+		cg.forceSelect = cg.snap->ps.fd.forcePowerSelected;
+	}
+}
+
+// the selection is reset to the server's once the bar times out, so keep the timer running and only hide the bar
+static void CG_ForcePowersUp_f( void ) {
+	cg.powersHeld = qfalse;
+	cg.forceSelectTime = cg.powersReleaseTime = cg.time;
+}
+
 /*
 =================
 CG_ScoresDown_f
@@ -337,9 +361,13 @@ static void CG_WavesShopMenu_f( void ) {
 static consoleCommand_t	commands[] = {
 	{ "+force_repulse",				CG_ForceRepulseDown_f },
 	{ "+force_throw",				CG_ForceThrowDown_f },
+	{ "+forcepowers",				CG_ForcePowersDown_f },
+	{ "+gadgets",					CG_GadgetsDown_f },
 	{ "+scores",					CG_ScoresDown_f },
 	{ "-force_repulse",				CG_ForceRepulseUp_f },
 	{ "-force_throw",				CG_ForceThrowUp_f },
+	{ "-forcepowers",				CG_ForcePowersUp_f },
+	{ "-gadgets",					CG_GadgetsUp_f },
 	{ "-scores",					CG_ScoresUp_f },
 	{ "briefing",					CG_SiegeBriefing_f },
 	{ "clientlist",					CG_ClientList_f },

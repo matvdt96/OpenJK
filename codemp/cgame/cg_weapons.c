@@ -1389,6 +1389,14 @@ void CG_NextWeapon_f( void ) {
 	if ( !cg.snap ) {
 		return;
 	}
+	if ( cg.gadgetsHeld ) {
+		CG_NextInventory_f();
+		return;
+	}
+	if ( cg.powersHeld ) {
+		CG_NextForcePower_f();
+		return;
+	}
 	if ( cg.snap->ps.pm_flags & PMF_FOLLOW ) {
 		return;
 	}
@@ -1453,6 +1461,14 @@ void CG_PrevWeapon_f( void ) {
 	int		original;
 
 	if ( !cg.snap ) {
+		return;
+	}
+	if ( cg.gadgetsHeld ) {
+		CG_PrevInventory_f();
+		return;
+	}
+	if ( cg.powersHeld ) {
+		CG_PrevForcePower_f();
 		return;
 	}
 	if ( cg.snap->ps.pm_flags & PMF_FOLLOW ) {

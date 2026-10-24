@@ -1487,6 +1487,17 @@ static qhandle_t CG_HudBarFont( void )
 }
 
 // Ammo of the current weapon, right aligned with its bottom at y: weapon name above, cartridges icon and count, orange when low
+// Name of an item in upper case, from the string package when it has one
+static void CG_HudItemTitle( const gitem_t *item, char *buf, int size )
+{
+	Q_strncpyz( buf, item->classname, size );
+	if ( !trap->SE_GetStringTextString( va( "SP_INGAME_%s", Q_strupr( buf ) ), buf, size ) )
+	{
+		Q_strncpyz( buf, item->classname, size );
+	}
+	Q_strupr( buf );
+}
+
 static void CG_DrawHudAmmo( float right, float bottom, float h )
 {
 	const int weapon = cg.snap->ps.weapon;
@@ -1527,12 +1538,7 @@ static void CG_DrawHudAmmo( float right, float bottom, float h )
 	{
 		return;
 	}
-	Q_strncpyz( name, cg_weapons[weapon].item->classname, sizeof( name ) );
-	if ( !trap->SE_GetStringTextString( va( "SP_INGAME_%s", Q_strupr( name ) ), name, sizeof( name ) ) )
-	{
-		Q_strncpyz( name, cg_weapons[weapon].item->classname, sizeof( name ) );
-	}
-	Q_strupr( name );
+	CG_HudItemTitle( cg_weapons[weapon].item, name, sizeof( name ) );
 	scale = h * HUDBAR_AMMO_NAME_H / Q_max( 1, trap->R_Font_HeightPixels( font, 1.0f ) );
 	trap->R_Font_DrawString( right - trap->R_Font_StrLenPixels( name, font, scale ), bottom - dh - h * HUDBAR_AMMO_NAME_H * 1.1f,
 		name, hudBarAmmoNameColor, font, -1, scale );
@@ -1814,6 +1820,323 @@ static void CG_DrawHudWaves( void )
 	}
 }
 
+#define HUDSELECT_CELL			58.0f
+#define HUDSELECT_CELL_ON		68.0f
+#define HUDSELECT_GAP			8.0f
+#define HUDSELECT_PAD			8.0f
+#define HUDSELECT_RADIUS		12.0f
+#define HUDSELECT_BORDER		2.0f
+#define HUDSELECT_BOTTOM		120.0f
+#define HUDSELECT_SUB_H			18.0f
+#define HUDSELECT_MAX			32
+#define HUDGADGET_SLOT			62.0f
+
+qboolean ForcePower_Valid( int i );
+
+typedef struct {
+	qhandle_t	icon;
+	int			ammo;	// shown under the cell, -1 = none
+	qboolean	low;
+	qboolean	dim;
+} hudSelectCell_t;
+
+static const vec4_t hudSelectCellColor = { 1.0f, 1.0f, 1.0f, 0.05f };
+static const vec4_t hudSelectOnColor = { 0.17f, 0.16f, 0.11f, 0.9f };
+static const vec4_t hudSelectSubColor = { 1.0f, 1.0f, 1.0f, 0.6f };
+static const vec4_t hudSelectHintColor = { 1.0f, 1.0f, 1.0f, 0.7f };
+
+// Rounded box: the quarters of a disc for the corners, its middle row and column stretched in between
+static void CG_DrawHudBox( float x, float y, float w, float h, float r, const vec4_t color )
+{
+	const float ry = Q_min( r, h * 0.5f ), rx = Q_min( ry * CG_HudBarAspect(), w * 0.5f );
+
+	trap->R_SetColor( color );
+	trap->R_DrawStretchPic( x, y, rx, ry, 0, 0, 0.5f, 0.5f, cgs.media.hudBarCircle );
+	trap->R_DrawStretchPic( x + rx, y, w - rx * 2.0f, ry, 0.5f, 0, 0.5f, 0.5f, cgs.media.hudBarCircle );
+	trap->R_DrawStretchPic( x + w - rx, y, rx, ry, 0.5f, 0, 1, 0.5f, cgs.media.hudBarCircle );
+	trap->R_DrawStretchPic( x, y + ry, rx, h - ry * 2.0f, 0, 0.5f, 0.5f, 0.5f, cgs.media.hudBarCircle );
+	trap->R_DrawStretchPic( x + rx, y + ry, w - rx * 2.0f, h - ry * 2.0f, 0.5f, 0.5f, 0.5f, 0.5f, cgs.media.hudBarCircle );
+	trap->R_DrawStretchPic( x + w - rx, y + ry, rx, h - ry * 2.0f, 0.5f, 0.5f, 1, 0.5f, cgs.media.hudBarCircle );
+	trap->R_DrawStretchPic( x, y + h - ry, rx, ry, 0, 0.5f, 0.5f, 1, cgs.media.hudBarCircle );
+	trap->R_DrawStretchPic( x + rx, y + h - ry, w - rx * 2.0f, ry, 0.5f, 0.5f, 0.5f, 1, cgs.media.hudBarCircle );
+	trap->R_DrawStretchPic( x + w - rx, y + h - ry, rx, ry, 0.5f, 0.5f, 1, 1, cgs.media.hudBarCircle );
+}
+
+// Icon cell, the selected one bigger with an amber border
+static void CG_DrawHudCell( float x, float y, float size, qboolean selected, qhandle_t icon, float alpha )
+{
+	const float u = HUDWAVES_UNIT * CG_HudBarScale(), aspect = CG_HudBarAspect();
+	const float r = HUDSELECT_RADIUS * u, b = HUDSELECT_BORDER * u, iconSize = size * 0.8f;
+	vec4_t iconColor = { 1.0f, 1.0f, 1.0f, 1.0f };
+
+	if ( selected )
+	{
+		CG_DrawHudBox( x, y, size * aspect, size, r, hudBarHealthColor );
+		CG_DrawHudBox( x + b * aspect, y + b, ( size - b * 2.0f ) * aspect, size - b * 2.0f, r - b, hudSelectOnColor );
+	}
+	else
+	{
+		CG_DrawHudBox( x, y, size * aspect, size, r, hudSelectCellColor );
+	}
+	if ( icon )
+	{
+		iconColor[3] = alpha;
+		trap->R_SetColor( iconColor );
+		trap->R_DrawStretchPic( x + ( size - iconSize ) * 0.5f * aspect, y + ( size - iconSize ) * 0.5f, iconSize * aspect, iconSize,
+			0, 0, 1, 1, icon );
+	}
+}
+
+// Selection bar at the bottom center: the cells in a row, the name of the selected one on top, a hint below
+static void CG_DrawHudSelectBar( const hudSelectCell_t *cells, int count, int selected, const char *name, const char *hint )
+{
+	const float u = HUDWAVES_UNIT * CG_HudBarScale(), aspect = CG_HudBarAspect();
+	const float gap = HUDSELECT_GAP * u * aspect, pad = HUDSELECT_PAD * u, rowH = HUDSELECT_CELL_ON * u;
+	qboolean subs = qfalse;
+	float w, x, panelH, panelY;
+	int i;
+
+	if ( count <= 0 )
+	{
+		return;
+	}
+	w = pad * 2.0f * aspect + gap * ( count - 1 );
+	for ( i = 0; i < count; i++ )
+	{
+		w += ( i == selected ? HUDSELECT_CELL_ON : HUDSELECT_CELL ) * u * aspect;
+		subs |= cells[i].ammo >= 0;
+	}
+	panelH = pad * 2.0f + rowH + ( subs ? HUDSELECT_SUB_H * u : 0.0f );
+	panelY = SCREEN_HEIGHT - HUDSELECT_BOTTOM * u - panelH;
+	x = ( SCREEN_WIDTH - w ) * 0.5f;
+
+	CG_DrawHudBox( x, panelY, w, panelH, 18.0f * u, hudWavesPanelColor );
+	x += pad * aspect;
+	for ( i = 0; i < count; i++ )
+	{
+		const float size = ( i == selected ? HUDSELECT_CELL_ON : HUDSELECT_CELL ) * u;
+		const float alpha = cells[i].dim ? 0.35f : i == selected ? 1.0f : 0.75f;
+
+		CG_DrawHudCell( x, panelY + pad + ( rowH - size ) * 0.5f, size, i == selected, cells[i].icon, alpha );
+		if ( cells[i].ammo >= 0 )
+		{
+			CG_HudText( x + size * aspect * 0.5f, panelY + pad + rowH + HUDSELECT_SUB_H * u * 0.5f, 14.0f * u,
+				cells[i].low ? hudBarAmmoLowColor : i == selected ? hudBarForceColor : hudSelectSubColor, va( "%i", cells[i].ammo ), ITEM_ALIGN_CENTER );
+		}
+		x += size * aspect + gap;
+	}
+	if ( name && name[0] )
+	{
+		CG_HudText( SCREEN_WIDTH * 0.5f, panelY - 19.0f * u, 18.0f * u, hudBarHealthColor, name, ITEM_ALIGN_CENTER );
+	}
+	if ( hint && hint[0] )
+	{
+		CG_HudText( SCREEN_WIDTH * 0.5f, panelY + panelH + 16.0f * u, 12.0f * u, hudSelectHintColor, hint, ITEM_ALIGN_CENTER );
+	}
+	trap->R_SetColor( NULL );
+}
+
+static void CG_HudAddWeaponCell( hudSelectCell_t *cells, int *count, int *selected, int weapon )
+{
+	const int bits = cg.predictedPlayerState.stats[STAT_WEAPONS];
+	hudSelectCell_t *cell;
+	int max;
+
+	if ( *count >= HUDSELECT_MAX || !( bits & ( 1 << weapon ) ) || !cgs.media.weaponIcons[weapon] )
+	{
+		return;
+	}
+	if ( ( weapon == WP_THERMAL || weapon == WP_TRIP_MINE ) && weapon != cg.weaponSelect
+		&& cg.predictedPlayerState.ammo[weaponData[weapon].ammoIndex] < weaponData[weapon].energyPerShot
+		&& cg.predictedPlayerState.ammo[weaponData[weapon].ammoIndex] < weaponData[weapon].altEnergyPerShot )
+	{
+		return;
+	}
+	CG_RegisterWeapon( weapon );
+	cell = &cells[*count];
+	cell->dim = !CG_WeaponCheck( weapon );
+	cell->icon = cell->dim ? cgs.media.weaponIcons_NA[weapon] : cgs.media.weaponIcons[weapon];
+	cell->ammo = -1;
+	cell->low = qfalse;
+	if ( weaponData[weapon].energyPerShot || weaponData[weapon].altEnergyPerShot )
+	{
+		cell->ammo = Q_max( 0, cg.predictedPlayerState.ammo[weaponData[weapon].ammoIndex] );
+		max = ammoData[weaponData[weapon].ammoIndex].max;
+		cell->low = max > 0 && cell->ammo * 100 <= max * HUDBAR_AMMO_LOW;
+	}
+	if ( weapon == cg.weaponSelect )
+	{
+		*selected = *count;
+	}
+	( *count )++;
+}
+
+static void CG_DrawHudWeaponSelect( void )
+{
+	hudSelectCell_t cells[HUDSELECT_MAX];
+	char name[128] = "";
+	int count = 0, selected = -1, i;
+
+	if ( cg.predictedPlayerState.emplacedIndex )
+	{
+		cg.weaponSelectTime = 0;
+	}
+	if ( cg.weaponSelectTime + WEAPON_SELECT_TIME < cg.time || cg.predictedPlayerState.stats[STAT_HEALTH] <= 0 )
+	{
+		return;
+	}
+	cg.itemPickupTime = 0;
+
+	for ( i = 1; i <= LAST_USEABLE_WEAPON; i++ )
+	{
+		if ( i == WP_CONCUSSION )
+		{
+			continue;
+		}
+		CG_HudAddWeaponCell( cells, &count, &selected, i );
+		if ( i == WP_FLECHETTE )
+		{
+			CG_HudAddWeaponCell( cells, &count, &selected, WP_CONCUSSION );
+		}
+	}
+	if ( cg_weapons[cg.weaponSelect].item )
+	{
+		CG_HudItemTitle( cg_weapons[cg.weaponSelect].item, name, sizeof( name ) );
+	}
+	CG_DrawHudSelectBar( cells, count, selected, name, NULL );
+}
+
+static void CG_DrawHudForceSelect( void )
+{
+	hudSelectCell_t cells[HUDSELECT_MAX];
+	char name[128] = "";
+	int count = 0, selected = -1, i;
+
+	if ( cg.snap->ps.stats[STAT_HEALTH] <= 0 )
+	{
+		return;
+	}
+	if ( cg.forceSelectTime + WEAPON_SELECT_TIME < cg.time )
+	{
+		cg.forceSelect = cg.snap->ps.fd.forcePowerSelected;
+		return;
+	}
+	if ( !cg.snap->ps.fd.forcePowersKnown )
+	{
+		return;
+	}
+
+	for ( i = 0; i < NUM_FORCE_POWERS && count < HUDSELECT_MAX; i++ )
+	{
+		const int power = forcePowerSorted[i];
+
+		if ( !ForcePower_Valid( power ) || !cgs.media.forcePowerIcons[power] )
+		{
+			continue;
+		}
+		if ( power == cg.forceSelect )
+		{
+			selected = count;
+		}
+		cells[count].icon = cgs.media.forcePowerIcons[power];
+		cells[count].ammo = -1;
+		cells[count].low = qfalse;
+		cells[count].dim = qfalse;
+		count++;
+	}
+	if ( cg.forceSelect >= 0 && cg.forceSelect < NUM_FORCE_POWERS && showPowersName[cg.forceSelect] )
+	{
+		Q_strncpyz( name, CG_ForcePowerName( cg.forceSelect ), sizeof( name ) );
+		Q_strupr( name );
+	}
+	CG_DrawHudSelectBar( cells, count, selected, name, cg.powersHeld ? "WHEEL TO SCROLL  -  RELEASE TO SELECT" : NULL );
+}
+
+static void CG_DrawHudInvenSelect( void )
+{
+	hudSelectCell_t cells[HUDSELECT_MAX];
+	char name[128] = "";
+	int count = 0, selected = -1, i, itemIndex;
+
+	if ( cg.gadgetsHeld )
+	{
+		cg.invenSelectTime = cg.time;
+	}
+	if ( cg.snap->ps.stats[STAT_HEALTH] <= 0 || cg.invenSelectTime + WEAPON_SELECT_TIME < cg.time )
+	{
+		return;
+	}
+	if ( !cg.snap->ps.stats[STAT_HOLDABLE_ITEM] || !cg.snap->ps.stats[STAT_HOLDABLE_ITEMS] )
+	{
+		return;
+	}
+	if ( cg.itemSelect == -1 )
+	{
+		cg.itemSelect = bg_itemlist[cg.snap->ps.stats[STAT_HOLDABLE_ITEM]].giTag;
+	}
+
+	for ( i = 0; i < HI_NUM_HOLDABLE && count < HUDSELECT_MAX; i++ )
+	{
+		if ( !( cg.snap->ps.stats[STAT_HOLDABLE_ITEMS] & ( 1 << i ) ) || !BG_IsItemSelectable( &cg.predictedPlayerState, i ) || !cgs.media.invenIcons[i] )
+		{
+			continue;
+		}
+		if ( i == cg.itemSelect )
+		{
+			selected = count;
+		}
+		cells[count].icon = cgs.media.invenIcons[i];
+		cells[count].ammo = -1;
+		cells[count].low = qfalse;
+		cells[count].dim = qfalse;
+		count++;
+	}
+	itemIndex = BG_GetItemIndexByTag( cg.itemSelect, IT_HOLDABLE );
+	if ( itemIndex > 0 && bg_itemlist[itemIndex].classname )
+	{
+		CG_HudItemTitle( &bg_itemlist[itemIndex], name, sizeof( name ) );
+	}
+	CG_DrawHudSelectBar( cells, count, selected, name, cg.gadgetsHeld ? "WHEEL TO SCROLL  -  RELEASE TO SELECT" : NULL );
+}
+
+// Selected holdable item beside the ammo counter, with the key that uses it
+static void CG_DrawHudGadgetSlot( float right, float bottom )
+{
+	const float u = HUDWAVES_UNIT * CG_HudBarScale(), aspect = CG_HudBarAspect();
+	const float size = HUDGADGET_SLOT * u, x = right - size * aspect, y = bottom - size;
+	const playerState_t *ps = &cg.snap->ps;
+	char name[128];
+	int item, key;
+
+	if ( !ps->stats[STAT_HOLDABLE_ITEMS] || !ps->stats[STAT_HOLDABLE_ITEM] )
+	{
+		return;
+	}
+	item = bg_itemlist[ps->stats[STAT_HOLDABLE_ITEM]].giTag;
+	if ( item <= HI_NONE || item >= HI_NUM_HOLDABLE || !( ps->stats[STAT_HOLDABLE_ITEMS] & ( 1 << item ) ) || !cgs.media.invenIcons[item] )
+	{
+		return;
+	}
+
+	CG_DrawHudBox( x, y, size * aspect, size, 14.0f * u, hudWavesPanelColor );
+	trap->R_SetColor( NULL );
+	trap->R_DrawStretchPic( x + size * 0.12f * aspect, y + size * 0.12f, size * 0.76f * aspect, size * 0.76f, 0, 0, 1, 1, cgs.media.invenIcons[item] );
+
+	CG_HudItemTitle( &bg_itemlist[ps->stats[STAT_HOLDABLE_ITEM]], name, sizeof( name ) );
+	CG_HudText( x + size * aspect * 0.5f, y - 9.0f * u, 10.0f * u, hudBarAmmoNameColor, name, ITEM_ALIGN_CENTER );
+
+	key = trap->Key_GetKey( "+button2" );
+	if ( key > ' ' && key < 127 )
+	{
+		const float chip = 22.0f * u;
+
+		CG_DrawHudBox( x + size * aspect - chip * 0.7f * aspect, y + size - chip * 0.7f, chip * aspect, chip, 6.0f * u, hudBarForceColor );
+		CG_HudText( x + size * aspect + chip * 0.3f * aspect - chip * 0.5f * aspect, y + size + chip * 0.3f - chip * 0.5f, 14.0f * u,
+			hudBarDarkColor, va( "%c", toupper( key ) ), ITEM_ALIGN_CENTER );
+	}
+	trap->R_SetColor( NULL );
+}
+
 static void CG_DrawHudBars( void )
 {
 	static float shownHealth, shownArmor, shownForce;
@@ -1867,6 +2190,7 @@ static void CG_DrawHudBars( void )
 	{
 		CG_DrawHudAmmo( SCREEN_WIDTH - HUDBAR_X, SCREEN_HEIGHT - HUDBAR_BOTTOM - healthH - HUDBAR_GAP * scale, healthH );
 	}
+	CG_DrawHudGadgetSlot( SCREEN_WIDTH - HUDBAR_X - armorLength - 14.0f * HUDWAVES_UNIT * scale * CG_HudBarAspect(), SCREEN_HEIGHT - HUDBAR_BOTTOM );
 
 	CG_DrawHudWaves();
 
@@ -8839,7 +9163,7 @@ static void CG_Draw2D( void ) {
 				CG_DrawIconBackground();
 			}
 
-			if (inTime > wpTime)
+			if (inTime > wpTime || cg.gadgetsHeld)
 			{
 				drawSelect = 1;
 				bestTime = cg.invenSelectTime;
@@ -8850,7 +9174,7 @@ static void CG_Draw2D( void ) {
 				bestTime = cg.weaponSelectTime;
 			}
 
-			if (cg.forceSelectTime > bestTime)
+			if (cg.forceSelectTime > bestTime || cg.powersHeld)
 			{
 				drawSelect = 3;
 			}
@@ -8858,13 +9182,30 @@ static void CG_Draw2D( void ) {
 			switch(drawSelect)
 			{
 			case 1:
-				CG_DrawInvenSelect();
+				if ( cg_hudBars.integer )
+					CG_DrawHudInvenSelect();
+				else
+				{
+					if ( cg.gadgetsHeld )
+						cg.invenSelectTime = cg.time;
+					CG_DrawInvenSelect();
+				}
 				break;
 			case 2:
-				CG_DrawWeaponSelect();
+				if ( cg_hudBars.integer )
+					CG_DrawHudWeaponSelect();
+				else
+					CG_DrawWeaponSelect();
 				break;
 			case 3:
-				CG_DrawForceSelect();
+				if ( cg.powersHeld )
+					cg.forceSelectTime = cg.time;
+				if ( !cg.powersHeld && cg.forceSelectTime <= cg.powersReleaseTime )
+					break;
+				if ( cg_hudBars.integer )
+					CG_DrawHudForceSelect();
+				else
+					CG_DrawForceSelect();
 				break;
 			default:
 				break;

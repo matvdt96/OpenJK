@@ -824,6 +824,9 @@ typedef struct cg_s {
 
 	int			forceSelect;
 	int			itemSelect;
+	qboolean	gadgetsHeld;	// +gadgets: the weapon keys cycle the holdable items
+	qboolean	powersHeld;		// +forcepowers: the weapon keys cycle the force powers
+	int			powersReleaseTime;	// force bar hidden until the next selection change
 
 	// auto rotating items
 	vec3_t		autoAngles;
@@ -1891,6 +1894,7 @@ void CG_Weapon_f( void );
 void CG_WeaponClean_f( void );
 
 void CG_RegisterWeapon( int weaponNum);
+qboolean CG_WeaponCheck( int weap );
 void CG_RegisterItemVisuals( int itemNum );
 
 void CG_FireWeapon( centity_t *cent, qboolean alt_fire );
