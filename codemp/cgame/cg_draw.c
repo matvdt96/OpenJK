@@ -1698,6 +1698,26 @@ static void CG_DrawHudRadar( float cx, float top, float u )
 	trap->R_DrawStretchPic( cx - arrow * 0.5f * aspect, cy - arrow * 0.5f, arrow * aspect, arrow, 0, 0, 1, 1, cgs.media.hudRadarArrow );
 }
 
+// Current round in a pill at the top left, with the countdown to the next one between rounds
+static void CG_DrawHudRound( float x, float top, float u, int round, int state, int nextTime )
+{
+	const float aspect = CG_HudBarAspect();
+	const float h = HUDWAVES_PILL_H * u, cy = top + h * 0.5f, numH = 22.0f * u;
+	const char *text = va( "%i", state == 1 ? round + 1 : round );
+	const float labelW = CG_HudText( -1000.0f, -1000.0f, 18.0f * u, colorWhite, "ROUND", ITEM_ALIGN_LEFT );
+	const float w = ( 14.0f + 8.0f + 14.0f ) * u * aspect + labelW + CG_HudDigits( 0, 0, numH, colorWhite, text, qfalse );
+	const int secs = ( nextTime - cg.time + 999 ) / 1000;
+
+	CG_DrawHudPill( x, top, w, h, hudWavesPanelColor );
+	CG_HudText( x + 14.0f * u * aspect, cy, 18.0f * u, hudBarForceColor, "ROUND", ITEM_ALIGN_LEFT );
+	CG_HudDigits( x + ( 14.0f + 8.0f ) * u * aspect + labelW, cy, numH, hudBarForceColor, text, qtrue );
+	if ( state == 1 )
+	{
+		CG_HudText( x + w + 8.0f * u * aspect, cy, 18.0f * u, hudBarHealthColor, va( "IN %i", Q_max( 0, secs ) ), ITEM_ALIGN_LEFT );
+	}
+	trap->R_SetColor( NULL );
+}
+
 // Enemies left in the round: a red disc with the count and a label
 static void CG_DrawHudEnemies( float cx, float top, float u, int enemies )
 {
@@ -1778,6 +1798,10 @@ static void CG_DrawHudWaves( void )
 	}
 
 	CG_DrawHudCredits( HUDBAR_X, SCREEN_HEIGHT * HUDWAVES_CREDITS_Y, u );
+	if ( state != 0 )
+	{
+		CG_DrawHudRound( HUDBAR_X, HUDWAVES_MARGIN_Y * u, u, round, state, nextTime );
+	}
 	CG_DrawHudRadar( cx, y, u );
 	y += ( HUDWAVES_RADAR + HUDWAVES_SPACING ) * u;
 	if ( state == 2 )
@@ -6892,6 +6916,9 @@ static void CG_DrawWavesHud( void ) {
 
 	cs = CG_ConfigString( CS_WAVES );
 	if ( sscanf( cs, "%i %i %i %i", &round, &state, &enemies, &nextTime ) != 4 || state == 0 ) {
+		return;
+	}
+	if ( cg_hudBars.integer && cg.predictedPlayerState.pm_type != PM_SPECTATOR ) {
 		return;
 	}
 
