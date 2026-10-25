@@ -3116,6 +3116,7 @@ static qboolean BG_WavesParseItem( const char **p, wavesShopItem_t *item ) {
 	int		numAmounts = 0, i;
 
 	memset( item, 0, sizeof( *item ) );
+	item->baseRole = WAVES_ROLE_FORCE;
 	item->param = -1;
 	item->tab = 1;
 
@@ -3202,6 +3203,9 @@ static qboolean BG_WavesParseItem( const char **p, wavesShopItem_t *item ) {
 		}
 		else if ( !Q_stricmp( key, "base" ) ) {
 			item->baseLevel = atoi( token );
+		}
+		else if ( !Q_stricmp( key, "baseRole" ) ) {
+			item->baseRole = !Q_stricmp( token, "gunner" ) ? WAVES_ROLE_GUNNER : WAVES_ROLE_FORCE;
 		}
 		else {
 			Com_Printf( S_COLOR_YELLOW "%s: unknown key '%s'\n", WAVES_SHOP_FILE, key );

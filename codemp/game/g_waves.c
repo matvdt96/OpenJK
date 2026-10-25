@@ -36,7 +36,6 @@ along with this program; if not, see <http://www.gnu.org/licenses/>.
 #define WAVES_KILL_POINTS		60
 #define WAVES_BOSS_POINTS		500
 #define WAVES_ROUND_POINTS		100
-#define WAVES_REGEN_DELAY		5000
 #define WAVES_MAX_RESIST		90
 #define WAVES_GRIP_TIME			4000
 
@@ -89,7 +88,15 @@ typedef struct wavesSettings_s {
 	int		refillAlive;
 	int		blockCost;
 	int		shieldRegen;
+	int		healthRegenDelay;
 	int		shieldRegenDelay;
+	int		shieldWallHealth;
+	int		shieldWallTime;
+	int		shieldWallWidth;
+	int		shieldWallHeight;
+	int		sentryAmmo;
+	int		bacta[3];
+	int		bigBacta[3];
 } wavesSettings_t;
 
 typedef struct waveEnemy_s {
@@ -144,7 +151,15 @@ static void G_WavesDefaultSettings( void ) {
 	wavesSettings.refillAlive = 0;
 	wavesSettings.blockCost = 0;
 	wavesSettings.shieldRegen = 0;
+	wavesSettings.healthRegenDelay = 5;
 	wavesSettings.shieldRegenDelay = 3;
+	wavesSettings.shieldWallHealth = 0;
+	wavesSettings.shieldWallTime = 25;
+	wavesSettings.shieldWallWidth = 0;
+	wavesSettings.shieldWallHeight = 0;
+	wavesSettings.sentryAmmo = 40;
+	VectorClear( wavesSettings.bacta );
+	VectorClear( wavesSettings.bigBacta );
 }
 
 static qboolean G_WavesParseInt( const char **p, int *out ) {
@@ -192,7 +207,19 @@ static void G_WavesParseSettings( const char **p ) {
 		else if ( !Q_stricmp( token, "refillAlive" ) )			wavesSettings.refillAlive = value;
 		else if ( !Q_stricmp( token, "blockCost" ) )			wavesSettings.blockCost = value;
 		else if ( !Q_stricmp( token, "shieldRegen" ) )			wavesSettings.shieldRegen = value;
+		else if ( !Q_stricmp( token, "healthRegenDelay" ) )		wavesSettings.healthRegenDelay = value;
 		else if ( !Q_stricmp( token, "shieldRegenDelay" ) )		wavesSettings.shieldRegenDelay = value;
+		else if ( !Q_stricmp( token, "shieldWallHealth" ) )		wavesSettings.shieldWallHealth = value;
+		else if ( !Q_stricmp( token, "shieldWallTime" ) )		wavesSettings.shieldWallTime = value;
+		else if ( !Q_stricmp( token, "shieldWallWidth" ) )		wavesSettings.shieldWallWidth = value;
+		else if ( !Q_stricmp( token, "shieldWallHeight" ) )		wavesSettings.shieldWallHeight = value;
+		else if ( !Q_stricmp( token, "sentryAmmo" ) )			wavesSettings.sentryAmmo = value;
+		else if ( !Q_stricmp( token, "bactaHeal" ) )			wavesSettings.bacta[0] = value;
+		else if ( !Q_stricmp( token, "bactaRegen" ) )			wavesSettings.bacta[1] = value;
+		else if ( !Q_stricmp( token, "bactaTime" ) )			wavesSettings.bacta[2] = value;
+		else if ( !Q_stricmp( token, "bigBactaHeal" ) )		wavesSettings.bigBacta[0] = value;
+		else if ( !Q_stricmp( token, "bigBactaRegen" ) )		wavesSettings.bigBacta[1] = value;
+		else if ( !Q_stricmp( token, "bigBactaTime" ) )		wavesSettings.bigBacta[2] = value;
 		else Com_Printf( S_COLOR_YELLOW "%s: unknown setting '%s'\n", WAVES_FILE, token );
 	}
 }
@@ -732,7 +759,7 @@ static int G_WavesItemLevel( gentity_t *ent, int index ) {
 	const wavesShopItem_t	*item = &shopItems[index];
 	int						itemLevel = ent->client->pers.waves.levels[index];
 
-	if ( item->type == WAVES_ITEM_POWER && ent->client->pers.waves.role == WAVES_ROLE_FORCE && itemLevel < item->baseLevel ) {
+	if ( ent->client->pers.waves.role == item->baseRole && itemLevel < item->baseLevel ) {
 		itemLevel = item->baseLevel;
 	}
 	return itemLevel;
@@ -743,7 +770,7 @@ static int G_WavesBonus( gentity_t *ent, int type ) {
 
 	for ( i = 0; i < numShopItems; i++ ) {
 		if ( shopItems[i].type == type ) {
-			bonus += BG_WavesItemTotal( &shopItems[i], ent->client->pers.waves.levels[i] );
+			bonus += BG_WavesItemTotal( &shopItems[i], G_WavesItemLevel( ent, i ) );
 		}
 	}
 	return bonus;
@@ -1409,6 +1436,54 @@ static int G_WavesDamageType( int mod ) {
 	}
 }
 
+// Shield wall in Waves: its health and the loss per second that empties it in shieldWallTime seconds
+qboolean G_WavesShieldWall( int *health, int *decay ) {
+	if ( level.gametype != GT_WAVES || wavesSettings.shieldWallHealth <= 0 ) {
+		return qfalse;
+	}
+	*health = wavesSettings.shieldWallHealth;
+	*decay = Q_max( 1, wavesSettings.shieldWallHealth / Q_max( 1, wavesSettings.shieldWallTime ) );
+	return qtrue;
+}
+
+// Largest shield wall in Waves, kept within what its entity state can carry
+void G_WavesShieldWallSize( int *height, int *halfWidth ) {
+	if ( level.gametype != GT_WAVES ) {
+		return;
+	}
+	if ( wavesSettings.shieldWallHeight > 0 ) {
+		*height = Q_min( wavesSettings.shieldWallHeight, 1023 );
+	}
+	if ( wavesSettings.shieldWallWidth > 0 ) {
+		*halfWidth = Q_min( wavesSettings.shieldWallWidth / 2, 1023 );
+	}
+}
+
+// Bacta in Waves: part of the max health at once, the rest over a few seconds (added to a cure still running)
+qboolean G_WavesUseBacta( gentity_t *ent, qboolean big ) {
+	const int	*bacta = big ? wavesSettings.bigBacta : wavesSettings.bacta;
+	int			maxHealth;
+
+	if ( level.gametype != GT_WAVES || !ent->client || ( bacta[0] <= 0 && bacta[1] <= 0 ) ) {
+		return qfalse;
+	}
+	maxHealth = ent->client->ps.stats[STAT_MAX_HEALTH];
+	ent->health = Q_min( ent->health + maxHealth * bacta[0] / 100, Q_max( ent->health, maxHealth ) );
+	if ( bacta[1] > 0 ) {
+		ent->client->pers.waves.bactaHeal += maxHealth * bacta[1] / 100;
+		ent->client->pers.waves.bactaTicks = Q_max( ent->client->pers.waves.bactaTicks, Q_max( 1, bacta[2] ) );
+	}
+	return qtrue;
+}
+
+// Shots of a new sentry gun, -1 = unlimited
+int G_WavesSentryAmmo( int ammo ) {
+	if ( level.gametype != GT_WAVES ) {
+		return ammo;
+	}
+	return wavesSettings.sentryAmmo > 0 ? wavesSettings.sentryAmmo : -1;
+}
+
 // Force an enemy pays to block a player's shot with the saber, 0 = free
 static int G_WavesSaberBlockCost( gentity_t *blocker, gentity_t *attacker, int damage ) {
 	if ( level.gametype != GT_WAVES || wavesSettings.blockCost <= 0 || !blocker || !blocker->client || blocker->s.number < MAX_CLIENTS
@@ -1497,10 +1572,25 @@ void G_WavesTimerActions( gentity_t *ent ) {
 	if ( ent->health > maxHealth ) {
 		ent->health--;
 	}
-	else if ( G_WavesPlayerAlive( ent ) && level.time - client->pers.waves.lastHurtTime >= WAVES_REGEN_DELAY ) {
+	else if ( G_WavesPlayerAlive( ent ) && level.time - client->pers.waves.lastHurtTime >= wavesSettings.healthRegenDelay * 1000 ) {
 		regen = G_WavesBonus( ent, WAVES_ITEM_HEALTHREGEN );
 		if ( regen > 0 && ent->health < maxHealth ) {
 			ent->health = Q_min( ent->health + regen, maxHealth );
+		}
+	}
+
+	if ( client->pers.waves.bactaTicks > 0 ) {
+		if ( G_WavesPlayerAlive( ent ) ) {
+			const int heal = ( client->pers.waves.bactaHeal + client->pers.waves.bactaTicks - 1 ) / client->pers.waves.bactaTicks;
+
+			client->pers.waves.bactaHeal -= heal;
+			client->pers.waves.bactaTicks--;
+			if ( ent->health < maxHealth ) {
+				ent->health = Q_min( ent->health + heal, maxHealth );
+			}
+		}
+		else {
+			client->pers.waves.bactaHeal = client->pers.waves.bactaTicks = 0;
 		}
 	}
 

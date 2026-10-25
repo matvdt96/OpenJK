@@ -409,6 +409,28 @@ localEntity_t *FX_AddOrientedLine(vec3_t start, vec3_t end, vec3_t normal, float
 	return(le);
 }
 
+// One layer of the shield wall, added for this frame only
+static void CG_AddShieldWallLayer( vec3_t start, vec3_t end, vec3_t normal, float height, float stScale, qhandle_t shader )
+{
+	refEntity_t re;
+
+	memset( &re, 0, sizeof( re ) );
+	re.reType = RT_ORIENTEDLINE;
+	re.customShader = shader;
+	re.data.line.width = height;
+	re.data.line.stscale = stScale;
+	re.rotation = 90;
+	re.shaderTexCoord[0] = 1;
+	re.shaderTexCoord[1] = 1;
+	re.shaderRGBA[0] = re.shaderRGBA[1] = re.shaderRGBA[2] = re.shaderRGBA[3] = 0xff;
+	VectorCopy( start, re.origin );
+	VectorCopy( end, re.oldorigin );
+	AxisClear( re.axis );
+	VectorCopy( normal, re.axis[0] );
+	RotateAroundDirection( re.axis, 0 );
+	trap->R_AddRefEntityToScene( &re );
+}
+
 void FX_DrawPortableShield(centity_t *cent)
 {
 	//rww - this code differs a bit from the draw code in EF, I don't know why I had to do
@@ -418,7 +440,7 @@ void FX_DrawPortableShield(centity_t *cent)
 	vec3_t			start, end, normal;
 	qhandle_t		shader;
 
-	if ( cl_paused.integer )
+	if ( cl_paused.integer && !cg_shieldWallStyle.integer )
 	{ //rww - fix to keep from rendering repeatedly while HUD menu is up
 		return;
 	}
@@ -429,10 +451,10 @@ void FX_DrawPortableShield(centity_t *cent)
 	}
 
 	// decode the data stored in time2
-	xaxis = ((cent->currentState.time2 >> 24) & 1);
-	height = ((cent->currentState.time2 >> 16) & 255);
-	posWidth = ((cent->currentState.time2 >> 8) & 255);
-	negWidth = (cent->currentState.time2 & 255);
+	xaxis = ((cent->currentState.time2 >> 30) & 1);
+	height = ((cent->currentState.time2 >> 20) & 1023);
+	posWidth = ((cent->currentState.time2 >> 10) & 1023);
+	negWidth = (cent->currentState.time2 & 1023);
 
 	team = (cent->currentState.otherEntityNum2);
 
@@ -457,6 +479,18 @@ void FX_DrawPortableShield(centity_t *cent)
 
 	start[2] += height/2;
 	end[2] += height/2;
+
+	if ( cg_shieldWallStyle.integer && height > 0 )
+	{
+		const qboolean red = team == TEAM_RED ? qtrue : qfalse;
+		const qboolean hit = cent->currentState.trickedentindex ? qtrue : qfalse;
+
+		CG_AddShieldWallLayer( start, end, normal, height, (float)( posWidth + negWidth ) / height,
+			trap->R_RegisterShader( va( "gfx/misc/shield_wall_%s%s", red ? "red" : "blue", hit ? "_hit" : "" ) ) );
+		CG_AddShieldWallLayer( start, end, normal, height, 1.0f,
+			trap->R_RegisterShader( va( "gfx/misc/shield_wall_%s_glow%s", red ? "red" : "blue", hit ? "_hit" : "" ) ) );
+		return;
+	}
 
 	if (team == TEAM_RED)
 	{

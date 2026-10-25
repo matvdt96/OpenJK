@@ -1834,7 +1834,8 @@ typedef struct wavesShopItem_s {
 	int		tab;		// shop tab, 0 = quick buy button
 	int		param;		// weapon, force power or holdable item
 	int		amount[MAX_WAVES_ITEM_LEVELS];	// consumables: ammo given (first value); upgrades: bonus of each level, the last value repeats
-	int		baseLevel;	// level the force user starts with
+	int		baseLevel;	// level baseRole starts with
+	int		baseRole;	// force user unless set
 	int		numLevels;	// 0 = can be bought again and again at price[0]
 	int		price[MAX_WAVES_ITEM_LEVELS];
 } wavesShopItem_t;

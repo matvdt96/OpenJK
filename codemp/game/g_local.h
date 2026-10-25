@@ -512,6 +512,8 @@ typedef struct clientPersistant_s {
 		int		ammoRegenFrac;					// thousandths of ammo regenerated but not given yet
 		int		holdables;						// holdable items kept across deaths
 		qboolean	cloakNotarget;				// notarget was set by the cloak
+		int		bactaHeal;						// health a bacta still has to give over time
+		int		bactaTicks;						// seconds left to give it
 	} waves;
 } clientPersistant_t;
 
@@ -1400,6 +1402,10 @@ int G_WavesMaxAmmo( gentity_t *ent, int ammo );
 int G_WavesForceRegenTime( gentity_t *ent, int regenTime );
 int G_WavesForceResist( gentity_t *target, gentity_t *attacker );
 qboolean G_WavesGripResisted( gentity_t *target, gentity_t *attacker );
+qboolean G_WavesShieldWall( int *health, int *decay );
+void G_WavesShieldWallSize( int *height, int *halfWidth );
+qboolean G_WavesUseBacta( gentity_t *ent, qboolean big );
+int G_WavesSentryAmmo( int ammo );
 float G_WavesSplashRadius( gentity_t *attacker, float radius, int mod );
 float G_WavesSpreadScale( gentity_t *ent );
 void G_WavesWeaponFired( gentity_t *ent );

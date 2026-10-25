@@ -149,10 +149,15 @@ void ShieldThink(gentity_t *self)
 	{
 		self->health -= SHIELD_SIEGE_HEALTH_DEC;
 	}
+	else if ( self->genericValue1 )
+	{
+		self->health -= self->genericValue1;
+	}
 	else
 	{
 		self->health -= SHIELD_HEALTH_DEC;
 	}
+	self->s.health = Q_max( 0, self->health );
 	self->nextthink = level.time + 1000;
 	if (self->health <= 0)
 	{
@@ -183,6 +188,7 @@ void ShieldPain(gentity_t *self, gentity_t *attacker, int damage)
 	G_AddEvent(self, EV_GENERAL_SOUND, shieldDamageSound);
 
 	self->s.trickedentindex = 1;
+	self->s.health = Q_max( 0, self->health );
 
 	return;
 }
@@ -279,13 +285,16 @@ void CreateShield(gentity_t *ent)
 	int			height, posWidth, negWidth, halfWidth = 0;
 	qboolean	xaxis;
 	int			paramData = 0;
+	int			maxHeight = MAX_SHIELD_HEIGHT, maxHalfWidth = MAX_SHIELD_HALFWIDTH;
 //	static int	shieldID;
+
+	G_WavesShieldWallSize( &maxHeight, &maxHalfWidth );
 
 	// trace upward to find height of shield
 	VectorCopy(ent->r.currentOrigin, end);
-	end[2] += MAX_SHIELD_HEIGHT;
+	end[2] += maxHeight;
 	trap->Trace (&tr, ent->r.currentOrigin, NULL, NULL, end, ent->s.number, MASK_SHOT, qfalse, 0, 0 );
-	height = (int)(MAX_SHIELD_HEIGHT * tr.fraction);
+	height = (int)(maxHeight * tr.fraction);
 
 	// use angles to find the proper axis along which to align the shield
 	VectorSet(mins, -SHIELD_HALFTHICKNESS, -SHIELD_HALFTHICKNESS, 0);
@@ -295,14 +304,14 @@ void CreateShield(gentity_t *ent)
 
 	if ((int)(ent->s.angles[YAW]) == 0) // shield runs along y-axis
 	{
-		posTraceEnd[1]+=MAX_SHIELD_HALFWIDTH;
-		negTraceEnd[1]-=MAX_SHIELD_HALFWIDTH;
+		posTraceEnd[1]+=maxHalfWidth;
+		negTraceEnd[1]-=maxHalfWidth;
 		xaxis = qfalse;
 	}
 	else  // shield runs along x-axis
 	{
-		posTraceEnd[0]+=MAX_SHIELD_HALFWIDTH;
-		negTraceEnd[0]-=MAX_SHIELD_HALFWIDTH;
+		posTraceEnd[0]+=maxHalfWidth;
+		negTraceEnd[0]-=maxHalfWidth;
 		xaxis = qtrue;
 	}
 
@@ -311,10 +320,10 @@ void CreateShield(gentity_t *ent)
 	VectorCopy(ent->r.currentOrigin, start);
 	start[2] += (height>>1);
 	trap->Trace (&tr, start, 0, 0, posTraceEnd, ent->s.number, MASK_SHOT, qfalse, 0, 0 );
-	posWidth = MAX_SHIELD_HALFWIDTH * tr.fraction;
+	posWidth = maxHalfWidth * tr.fraction;
 	// negative trace
 	trap->Trace (&tr, start, 0, 0, negTraceEnd, ent->s.number, MASK_SHOT, qfalse, 0, 0 );
-	negWidth = MAX_SHIELD_HALFWIDTH * tr.fraction;
+	negWidth = maxHalfWidth * tr.fraction;
 
 	// kef -- monkey with dimensions and place origin in center
 	halfWidth = (posWidth + negWidth)>>1;
@@ -344,21 +353,22 @@ void CreateShield(gentity_t *ent)
 	// Information for shield rendering.
 
 //	xaxis - 1 bit
-//	height - 0-254 8 bits
-//	posWidth - 0-255 8 bits
-//  negWidth - 0 - 255 8 bits
+//	height - 0-1023 10 bits
+//	posWidth - 0-1023 10 bits
+//  negWidth - 0-1023 10 bits
 
-	paramData = (xaxis << 24) | (height << 16) | (posWidth << 8) | (negWidth);
+	paramData = (xaxis << 30) | (height << 20) | (posWidth << 10) | (negWidth);
 	ent->s.time2 = paramData;
 
 	if ( level.gametype == GT_SIEGE )
 	{
 		ent->health = ceil((float)(SHIELD_SIEGE_HEALTH*1));
 	}
-	else
+	else if ( !G_WavesShieldWall( &ent->health, &ent->genericValue1 ) )
 	{
 		ent->health = ceil((float)(SHIELD_HEALTH*1));
 	}
+	ent->s.health = ent->s.maxhealth = ent->health;
 
 	ent->s.time = ent->health;//???
 	ent->pain = ShieldPain;
@@ -447,6 +457,7 @@ qboolean PlaceShield(gentity_t *playerent)
 			shield->think = CreateShield;
 			shield->nextthink = level.time + 500;	// power up after .5 seconds
 			shield->parent = playerent;
+			shield->r.broadcastClients[playerent->s.number / 32] |= 1 << ( playerent->s.number % 32 );
 
 			// Set team number.
 			shield->s.otherEntityNum2 = playerent->client->sess.sessionTeam;
@@ -934,7 +945,10 @@ void pas_think( gentity_t *ent )
 
 	if ( ent->enemy && ent->attackDebounceTime < level.time )
 	{
-		ent->count--;
+		if ( ent->count > 0 )
+		{
+			ent->count--;
+		}
 
 		if ( ent->count )
 		{
@@ -1017,7 +1031,7 @@ void SP_PAS( gentity_t *base )
 	if ( base->count == 0 )
 	{
 		// give ammo
-		base->count = TURRET_AMMO_COUNT;
+		base->count = G_WavesSentryAmmo( TURRET_AMMO_COUNT );
 	}
 
 	base->s.bolt1 = 1; //This is a sort of hack to indicate that this model needs special turret things done to it
@@ -1108,6 +1122,7 @@ void ItemUse_Sentry( gentity_t *ent )
 	sentry->genericValue5 = 1000;
 
 	sentry->genericValue8 = level.time;
+	sentry->s.time2 = level.time + TURRET_LIFETIME;
 
 	sentry->alliedTeam = ent->client->sess.sessionTeam;
 
@@ -1116,6 +1131,7 @@ void ItemUse_Sentry( gentity_t *ent )
 	trap->LinkEntity((sharedEntity_t *)sentry);
 
 	sentry->s.owner = ent->s.number;
+	sentry->r.broadcastClients[ent->s.number / 32] |= 1 << ( ent->s.number % 32 );
 	sentry->s.shouldtarget = qtrue;
 	if (level.gametype >= GT_TEAM)
 	{
@@ -1190,11 +1206,19 @@ static void MedPackGive(gentity_t *ent, int amount)
 
 void ItemUse_MedPack_Big(gentity_t *ent)
 {
+	if ( G_WavesUseBacta( ent, qtrue ) )
+	{
+		return;
+	}
 	MedPackGive(ent, MAX_MEDPACK_BIG_HEAL_AMOUNT);
 }
 
 void ItemUse_MedPack(gentity_t *ent)
 {
+	if ( G_WavesUseBacta( ent, qfalse ) )
+	{
+		return;
+	}
 	MedPackGive(ent, MAX_MEDPACK_HEAL_AMOUNT);
 }
 
