@@ -1347,6 +1347,8 @@ CG_DrawHUD
 #define HUDBAR_AMMO_ICON_H		0.55f
 #define HUDBAR_AMMO_NAME_H		0.33f
 #define HUDBAR_AMMO_LOW			15
+#define HUDBAR_GADGET_LOW		20
+#define HUDBAR_SENTRY_TIME		60000.0f
 
 static const vec4_t hudBarTrackColor = { 0.07f, 0.086f, 0.11f, 0.55f };
 static const vec4_t hudBarDarkColor = { 0.149f, 0.169f, 0.192f, 1.0f };
@@ -1355,6 +1357,9 @@ static const vec4_t hudBarForceColor = { 0.961f, 0.961f, 0.961f, 1.0f };
 static const vec4_t hudBarArmorColor = { 0.18f, 0.592f, 0.788f, 1.0f };
 static const vec4_t hudBarStyleOffColor = { 1.0f, 1.0f, 1.0f, 0.45f };
 static const vec4_t hudBarAmmoLowColor = { 1.0f, 0.541f, 0.239f, 1.0f };
+static const vec4_t hudBarGadgetLowColor = { 1.0f, 0.42f, 0.369f, 1.0f };
+static const vec4_t hudBarShieldWallColor = { 0.561f, 0.816f, 1.0f, 1.0f };
+static const vec4_t hudBarSentryColor = { 0.725f, 0.949f, 0.486f, 1.0f };
 static const vec4_t hudBarAmmoNameColor = { 1.0f, 1.0f, 1.0f, 0.65f };
 
 // Horizontal size of one unit of height, so the bars keep their shape on wide screens
@@ -1390,7 +1395,7 @@ static void CG_DrawHudBarDigit( float x, float y, float w, float h, int digit, f
 	}
 }
 
-static void CG_DrawHudBar( float x, float y, float w, float h, float frac, int value, qhandle_t track, qhandle_t fill,
+static void CG_DrawHudBar( float x, float y, float w, float h, float frac, int value, qhandle_t track, qhandle_t fill, qhandle_t icon,
 	const vec4_t fillColor, const vec4_t numColor, float numHeight, float numRight )
 {
 	const float aspect = CG_HudBarAspect();
@@ -1407,6 +1412,12 @@ static void CG_DrawHudBar( float x, float y, float w, float h, float frac, int v
 	{
 		trap->R_SetColor( fillColor );
 		trap->R_DrawStretchPic( x, y, w * frac, h, 0, 0, frac, 1, fill );
+	}
+	// like the digits, the part of the icon past the fill is drawn in the light colour
+	if ( frac < 1.0f )
+	{
+		trap->R_SetColor( numColor );
+		trap->R_DrawStretchPic( edge, y, x + w - edge, h, frac, 0, 1, 1, icon );
 	}
 	for ( i = 0; text[i]; i++, dx += dw )
 	{
@@ -1427,6 +1438,31 @@ static void CG_DrawHudPill( float x, float y, float w, float h, const vec4_t col
 	trap->R_DrawStretchPic( x, y, r, h, 0, 0, 0.5f, 1, cgs.media.hudBarCircle );
 	trap->R_DrawStretchPic( x + r, y, w - r * 2.0f, h, 0.5f, 0, 0.5f, 1, cgs.media.hudBarCircle );
 	trap->R_DrawStretchPic( x + w - r, y, r, h, 0.5f, 0, 1, 1, cgs.media.hudBarCircle );
+}
+
+// The pill of CG_DrawHudPill cut straight at x + w * frac
+static void CG_DrawHudPillCut( float x, float y, float w, float h, float frac, const vec4_t color )
+{
+	const float r = Q_min( w * 0.5f, h * 0.5f * CG_HudBarAspect() );
+	const float edge = x + w * Com_Clamp( 0.0f, 1.0f, frac );
+	float end;
+
+	if ( edge <= x )
+	{
+		return;
+	}
+	trap->R_SetColor( color );
+	end = Q_min( edge, x + r );
+	trap->R_DrawStretchPic( x, y, end - x, h, 0, 0, 0.5f * ( end - x ) / r, 1, cgs.media.hudBarCircle );
+	if ( edge > x + r )
+	{
+		end = Q_min( edge, x + w - r );
+		trap->R_DrawStretchPic( x + r, y, end - x - r, h, 0.5f, 0, 0.5f, 1, cgs.media.hudBarCircle );
+	}
+	if ( edge > x + w - r )
+	{
+		trap->R_DrawStretchPic( x + w - r, y, edge - x - w + r, h, 0.5f, 0, 0.5f + 0.5f * ( edge - x - w + r ) / r, 1, cgs.media.hudBarCircle );
+	}
 }
 
 // label: FAST, MEDIUM, STRONG, DUAL, STAFF (cells of gfx/hud/bf_style_labels)
@@ -1551,8 +1587,8 @@ static void CG_DrawHudAmmo( float right, float bottom, float h )
 #define HUDWAVES_PILL_H			32.0f
 #define HUDWAVES_SPACING		10.0f
 #define HUDWAVES_RADAR			180.0f
-#define HUDWAVES_BOSS_W			500.0f
-#define HUDWAVES_BOSS_H			30.0f
+#define HUDWAVES_BOSS_W			450.0f
+#define HUDWAVES_BOSS_H			36.0f
 #define HUDWAVES_BOSS_Y			52.0f
 #define HUDWAVES_GAIN_TIME		2000
 #define HUDWAVES_CREDITS_Y		( 424.0f / 720.0f )
@@ -1625,7 +1661,7 @@ static void CG_DrawHudCredits( float x, float top, float u )
 	lastScore = score;
 
 	CG_DrawHudPill( x, top, w, h, hudWavesPanelColor );
-	trap->R_SetColor( hudBarHealthColor );
+	trap->R_SetColor( NULL );
 	trap->R_DrawStretchPic( x + 14.0f * u * aspect, cy - icon * 0.5f, icon * aspect, icon, 0, 0, 1, 1, cgs.media.hudCredits );
 	CG_HudDigits( x + ( 14.0f + 18.0f + 10.0f ) * u * aspect, cy, numH, hudBarForceColor, text, qtrue );
 
@@ -1775,11 +1811,11 @@ static void CG_DrawHudBoss( float u, int health, const char *type )
 	CG_DrawHudPill( x, y, w, h, hudWavesPanelColor );
 	if ( trail > 0.0f )
 	{
-		CG_DrawHudPill( x, y, w * trail / 200.0f, h, hudWavesTrailColor );
+		CG_DrawHudPillCut( x, y, w, h, trail / 200.0f, hudWavesTrailColor );
 	}
 	if ( health > 0 )
 	{
-		CG_DrawHudPill( x, y, w * health / 200.0f, h, hudWavesRedColor );
+		CG_DrawHudPillCut( x, y, w, h, health / 200.0f, hudWavesRedColor );
 	}
 	CG_HudText( SCREEN_WIDTH * 0.5f, y + h * 0.5f, 20.0f * u, hudBarForceColor, name, ITEM_ALIGN_CENTER );
 	trap->R_SetColor( NULL );
@@ -2137,6 +2173,84 @@ static void CG_DrawHudGadgetSlot( float right, float bottom )
 	trap->R_SetColor( NULL );
 }
 
+// One gadget bar at the bottom centre, the label above it; returns the bottom of the next bar up
+static float CG_DrawHudGadgetBar( float bottom, const char *label, float frac, int value, qhandle_t fill, qhandle_t icon, const vec4_t color, qboolean dim )
+{
+	const float scale = CG_HudBarScale(), u = HUDWAVES_UNIT * scale;
+	const float h = HUDBAR_FORCE_H * scale, w = HUDBAR_LENGTH * scale * CG_HudBarAspect();
+	const float x = ( SCREEN_WIDTH - w ) * 0.5f, y = bottom - h;
+	vec4_t fillColor, numColor;
+
+	frac = Com_Clamp( 0.0f, 1.0f, frac );
+	VectorCopy4( !dim && frac * 100.0f <= HUDBAR_GADGET_LOW ? hudBarGadgetLowColor : color, fillColor );
+	VectorCopy4( fillColor, numColor );
+	if ( dim )
+	{
+		fillColor[3] = numColor[3] = 0.55f;
+	}
+	if ( label )
+	{
+		CG_HudText( SCREEN_WIDTH * 0.5f, y - 10.0f * u, 11.0f * u, hudBarAmmoNameColor, label, ITEM_ALIGN_CENTER );
+	}
+	CG_DrawHudBar( x, y, w, h, frac, Q_max( 0, value ), cgs.media.hudBarForceTrack, fill, icon, fillColor, numColor, 0.82f, 0.5f );
+	return y - 20.0f * u;
+}
+
+// Cloak fuel while it is not full (dimmed while it recharges), then the player's weakest shield wall and the sentry gun
+// closest to shutting down
+static void CG_DrawHudGadgets( void )
+{
+	const playerState_t *ps = &cg.snap->ps;
+	float bottom = SCREEN_HEIGHT - HUDBAR_BOTTOM;
+	float shieldFrac = 2.0f;
+	int shieldHealth = 0, sentryLeft = -1, i;
+
+	for ( i = 0; i < cg.snap->numEntities; i++ )
+	{
+		const entityState_t *es = &cg.snap->entities[i];
+
+		if ( es->owner != ps->clientNum )
+		{
+			continue;
+		}
+		if ( es->eType == ET_SPECIAL && es->modelindex == HI_SHIELD && es->maxhealth > 0 )
+		{
+			if ( (float)es->health / es->maxhealth < shieldFrac )
+			{
+				shieldFrac = (float)es->health / es->maxhealth;
+				shieldHealth = es->health;
+			}
+		}
+		else if ( es->eType == ET_GENERAL && es->time2 && !Q_stricmp( CG_ConfigString( CS_MODELS + es->modelindex ), "models/items/psgun.glm" ) )
+		{
+			const int left = Q_max( 0, es->time2 - cg.time );
+
+			if ( sentryLeft < 0 || left < sentryLeft )
+			{
+				sentryLeft = left;
+			}
+		}
+	}
+
+	if ( ps->cloakFuel < 100 || ps->powerups[PW_CLOAKED] || ( ( ps->stats[STAT_HOLDABLE_ITEMS] & ( 1 << HI_CLOAK ) )
+		&& bg_itemlist[ps->stats[STAT_HOLDABLE_ITEM]].giType == IT_HOLDABLE && bg_itemlist[ps->stats[STAT_HOLDABLE_ITEM]].giTag == HI_CLOAK ) )
+	{
+		const qboolean cloaked = ps->powerups[PW_CLOAKED] ? qtrue : qfalse;
+
+		bottom = CG_DrawHudGadgetBar( bottom, cloaked ? "CLOAKED" : NULL, ps->cloakFuel / 100.0f, ps->cloakFuel,
+			cgs.media.hudBarCloakFill, cgs.media.hudBarCloakIcon, hudBarForceColor, !cloaked && ps->cloakFuel < 100 );
+	}
+	if ( shieldFrac <= 1.0f )
+	{
+		bottom = CG_DrawHudGadgetBar( bottom, "SHIELD WALL", shieldFrac, shieldHealth, cgs.media.hudBarShieldWallFill, cgs.media.hudBarShieldWallIcon, hudBarShieldWallColor, qfalse );
+	}
+	if ( sentryLeft >= 0 )
+	{
+		CG_DrawHudGadgetBar( bottom, "SENTRY", (float)sentryLeft / HUDBAR_SENTRY_TIME, ( sentryLeft + 999 ) / 1000,
+			cgs.media.hudBarSentryFill, cgs.media.hudBarSentryIcon, hudBarSentryColor, qfalse );
+	}
+}
+
 static void CG_DrawHudBars( void )
 {
 	static float shownHealth, shownArmor, shownForce;
@@ -2175,11 +2289,11 @@ static void CG_DrawHudBars( void )
 	force = (int)( shownForce + 0.5f );
 
 	CG_DrawHudBar( HUDBAR_X, healthY, length, healthH, Com_Clamp( 0.0f, 1.0f, shownHealth / maxHealth ), health,
-		cgs.media.hudBarHealthTrack, cgs.media.hudBarHealthFill, colorTable[CT_WHITE], hudBarHealthColor, 0.62f, 0.38f );
+		cgs.media.hudBarHealthTrack, cgs.media.hudBarHealthFill, cgs.media.hudBarHealthIcon, colorTable[CT_WHITE], hudBarHealthColor, 0.62f, 0.38f );
 
 	CG_DrawHudBar( SCREEN_WIDTH - HUDBAR_X - armorLength, SCREEN_HEIGHT - HUDBAR_BOTTOM - healthH, armorLength, healthH,
 		Com_Clamp( 0.0f, 1.0f, shownArmor / ( ps->stats[STAT_MAX_ARMOR] > 0 ? ps->stats[STAT_MAX_ARMOR] : maxHealth ) ), armor,
-		cgs.media.hudBarArmorTrack, cgs.media.hudBarArmorFill, armorColor, hudBarArmorColor, 0.62f, 0.38f );
+		cgs.media.hudBarArmorTrack, cgs.media.hudBarArmorFill, cgs.media.hudBarArmorIcon, armorColor, hudBarArmorColor, 0.62f, 0.38f );
 
 	if ( ps->weapon == WP_SABER )
 	{
@@ -2191,6 +2305,7 @@ static void CG_DrawHudBars( void )
 		CG_DrawHudAmmo( SCREEN_WIDTH - HUDBAR_X, SCREEN_HEIGHT - HUDBAR_BOTTOM - healthH - HUDBAR_GAP * scale, healthH );
 	}
 	CG_DrawHudGadgetSlot( SCREEN_WIDTH - HUDBAR_X - armorLength - 14.0f * HUDWAVES_UNIT * scale * CG_HudBarAspect(), SCREEN_HEIGHT - HUDBAR_BOTTOM );
+	CG_DrawHudGadgets();
 
 	CG_DrawHudWaves();
 
@@ -2219,7 +2334,7 @@ static void CG_DrawHudBars( void )
 
 	CG_DrawHudBar( HUDBAR_X, SCREEN_HEIGHT - HUDBAR_BOTTOM - forceH, length, forceH,
 		Com_Clamp( 0.0f, 1.0f, shownForce / ( ps->stats[STAT_MAX_FORCE] > 0 ? ps->stats[STAT_MAX_FORCE] : HUDBAR_FORCE_MAX ) ), force,
-		cgs.media.hudBarForceTrack, cgs.media.hudBarForceFill, forceColor, hudBarForceColor, 0.82f, 0.5f );
+		cgs.media.hudBarForceTrack, cgs.media.hudBarForceFill, cgs.media.hudBarForceIcon, forceColor, hudBarForceColor, 0.82f, 0.5f );
 }
 
 void CG_DrawHUD(centity_t	*cent)
@@ -6148,7 +6263,8 @@ static void CG_DrawCrosshair( vec3_t worldPoint, int chEntValid ) {
 	//draw a health bar directly under the crosshair if we're looking at something
 	//that takes damage
 	if (crossEnt &&
-		crossEnt->currentState.maxhealth)
+		crossEnt->currentState.maxhealth &&
+		!(crossEnt->currentState.eType == ET_SPECIAL && crossEnt->currentState.modelindex == HI_SHIELD))
 	{
 		CG_DrawHealthBar(crossEnt, chX, chY, w, h);
 		chY += HEALTH_HEIGHT*2;
@@ -9107,7 +9223,7 @@ static void CG_Draw2D( void ) {
 	{ //draw it as long as it isn't full
         CG_DrawJetpackFuel();
 	}
-	if (cg.snap->ps.cloakFuel < 100)
+	if (cg.snap->ps.cloakFuel < 100 && ( !cg_hudBars.integer || cg.predictedPlayerState.pm_type == PM_SPECTATOR ))
 	{ //draw it as long as it isn't full
 		CG_DrawCloakFuel();
 	}

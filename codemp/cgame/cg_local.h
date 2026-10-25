@@ -1141,6 +1141,15 @@ typedef struct cgMedia_s {
 	qhandle_t	hudBarHealthFill;
 	qhandle_t	hudBarForceTrack;
 	qhandle_t	hudBarForceFill;
+	qhandle_t	hudBarCloakFill;
+	qhandle_t	hudBarShieldWallFill;
+	qhandle_t	hudBarSentryFill;
+	qhandle_t	hudBarHealthIcon;
+	qhandle_t	hudBarForceIcon;
+	qhandle_t	hudBarArmorIcon;
+	qhandle_t	hudBarCloakIcon;
+	qhandle_t	hudBarShieldWallIcon;
+	qhandle_t	hudBarSentryIcon;
 	qhandle_t	hudBarArmorTrack;
 	qhandle_t	hudBarArmorFill;
 	qhandle_t	hudBarCircle;

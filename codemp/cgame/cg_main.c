@@ -646,6 +646,15 @@ static void CG_RegisterSounds( void ) {
 	cgs.media.hudBarHealthFill			= trap->R_RegisterShaderNoMip( "gfx/hud/bf_health_fill" );
 	cgs.media.hudBarForceTrack			= trap->R_RegisterShaderNoMip( "gfx/hud/bf_force_track" );
 	cgs.media.hudBarForceFill			= trap->R_RegisterShaderNoMip( "gfx/hud/bf_force_fill" );
+	cgs.media.hudBarCloakFill			= trap->R_RegisterShaderNoMip( "gfx/hud/bf_cloak_fill" );
+	cgs.media.hudBarShieldWallFill		= trap->R_RegisterShaderNoMip( "gfx/hud/bf_shieldwall_fill" );
+	cgs.media.hudBarSentryFill			= trap->R_RegisterShaderNoMip( "gfx/hud/bf_sentry_fill" );
+	cgs.media.hudBarHealthIcon			= trap->R_RegisterShaderNoMip( "gfx/hud/bf_health_icon" );
+	cgs.media.hudBarForceIcon			= trap->R_RegisterShaderNoMip( "gfx/hud/bf_force_icon" );
+	cgs.media.hudBarArmorIcon			= trap->R_RegisterShaderNoMip( "gfx/hud/bf_armor_icon" );
+	cgs.media.hudBarCloakIcon			= trap->R_RegisterShaderNoMip( "gfx/hud/bf_cloak_icon" );
+	cgs.media.hudBarShieldWallIcon		= trap->R_RegisterShaderNoMip( "gfx/hud/bf_shieldwall_icon" );
+	cgs.media.hudBarSentryIcon			= trap->R_RegisterShaderNoMip( "gfx/hud/bf_sentry_icon" );
 	cgs.media.hudBarArmorTrack			= trap->R_RegisterShaderNoMip( "gfx/hud/bf_armor_track" );
 	cgs.media.hudBarArmorFill			= trap->R_RegisterShaderNoMip( "gfx/hud/bf_armor_fill" );
 	cgs.media.hudBarCircle				= trap->R_RegisterShaderNoMip( "gfx/hud/bf_circle" );
