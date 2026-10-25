@@ -34,6 +34,12 @@ static qboolean mouseActive = qfalse;
 
 static cvar_t *in_mouse             = NULL;
 static cvar_t *in_nograb;
+static cvar_t *in_ignoreQuitOnLoad  = NULL;
+
+// window close requests this soon after a map finished loading are ignored too
+#define IN_QUIT_GRACE_MSEC	3000
+static int in_activeTime;
+static qboolean in_wasActive;
 
 cvar_t *in_joystick          		= NULL;
 static cvar_t *in_joystickThreshold = NULL;
@@ -627,6 +633,7 @@ void IN_Init( void *windowData )
 	// mouse variables
 	in_mouse = Cvar_Get( "in_mouse", "1", CVAR_ARCHIVE );
 	in_nograb = Cvar_Get( "in_nograb", "0", CVAR_ARCHIVE_ND );
+	in_ignoreQuitOnLoad = Cvar_Get( "in_ignoreQuitOnLoad", "1", CVAR_ARCHIVE_ND );
 
 	SDL_StartTextInput( );
 
@@ -914,6 +921,13 @@ static void IN_ProcessEvents( void )
 				break;
 
 			case SDL_QUIT:
+				// under Wayland fullscreen a close request can show up while a map loads
+				if ( in_ignoreQuitOnLoad && in_ignoreQuitOnLoad->integer && ( ( cls.state != CA_DISCONNECTED && cls.state != CA_ACTIVE )
+					|| ( cls.state == CA_ACTIVE && Sys_Milliseconds() - in_activeTime < IN_QUIT_GRACE_MSEC ) ) )
+				{
+					Com_Printf( "Window close ignored during map load\n" );
+					break;
+				}
 				Cbuf_ExecuteText(EXEC_NOW, "quit Closed window\n");
 				break;
 
@@ -1168,6 +1182,12 @@ void IN_Frame (void) {
 
 	// If not DISCONNECTED (main menu) or ACTIVE (in game), we're loading
 	loading = (qboolean)( cls.state != CA_DISCONNECTED && cls.state != CA_ACTIVE );
+
+	if ( cls.state == CA_ACTIVE && !in_wasActive )
+	{
+		in_activeTime = Sys_Milliseconds();
+	}
+	in_wasActive = (qboolean)( cls.state == CA_ACTIVE );
 
 	if( !cls.glconfig.isFullscreen && ( Key_GetCatcher( ) & KEYCATCH_CONSOLE ) )
 	{
