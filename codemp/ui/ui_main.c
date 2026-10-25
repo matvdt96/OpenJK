@@ -2132,11 +2132,13 @@ static void UI_WavesShopDrawGrid( int role, const int *levels, int selected ) {
 	const float	left = 22, top = 133, width = 558, height = 409;
 	int			items[MAX_WAVES_SHOP_ITEMS];
 	int			count = UI_WavesShopTabItems( role, uiWavesShopTab, items );
-	qboolean	large = count <= 8;
-	int			cols = large ? 4 : 6;
-	float		gap = large ? 10 : 8, cellH = large ? 132 : 116;
+	int			cols = count <= 8 ? 4 : Q_max( 4, ( count + 2 ) / 3 );
+	qboolean	large = cols == 4;
+	int			rows = ( count + cols - 1 ) / cols;
+	float		gap = large ? 10 : 8;
+	float		cellH = large ? Q_min( 132, ( height - gap * ( rows - 1 ) ) / Q_max( 1, rows ) ) : 116;
 	float		cellW = ( width - gap * ( cols - 1 ) ) / cols;
-	int			i, maxCells = cols * (int)( ( height + gap ) / ( cellH + gap ) );
+	int			i, maxCells = cols * (int)( ( height + gap ) / ( cellH + gap ) + 0.01f );
 
 	for ( i = 0; i < count && i < maxCells; i++ ) {
 		float x = left + ( i % cols ) * ( cellW + gap );
